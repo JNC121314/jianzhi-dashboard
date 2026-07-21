@@ -708,9 +708,11 @@ function sortTbl(id,col){
   let th=document.getElementById(id).querySelectorAll('th')[col];
   let asc=th.classList.contains('sorted-asc');
   document.getElementById(id).querySelectorAll('th').forEach(function(h){h.classList.remove('sorted-asc','sorted-desc')});
+  let isDateCol=(id==='tblDaily'&&col===0);
   rows.sort(function(a,b){
     let va=(a.cells[col].textContent||'').replace(/[,%]/g,'').trim();
     let vb=(b.cells[col].textContent||'').replace(/[,%]/g,'').trim();
+    if(isDateCol)return asc?va.localeCompare(vb):vb.localeCompare(va);
     let na=parseFloat(va),nb=parseFloat(vb);
     if(!isNaN(na)&&!isNaN(nb))return asc?na-nb:nb-na;
     return asc?vb.localeCompare(va):va.localeCompare(vb,'zh');

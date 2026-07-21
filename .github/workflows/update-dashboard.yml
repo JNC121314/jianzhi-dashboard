@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pages: write
 
 jobs:
   update-dashboard:
@@ -57,7 +58,7 @@ jobs:
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add docs/index.html data/exports/简知分销数据看板.html data/exports/*/dist_order_*.xlsx data/exports/export_results.json 2>/dev/null || true
+          git add docs/index.html data/exports/简知分销数据看板.html data/exports/overview_push.html data/exports/*/dist_order_*.xlsx data/exports/export_results.json 2>/dev/null || true
           git diff --staged --quiet || git commit -m "📅 日报更新 $(date +'%Y-%m-%d %H:%M')"
           git push
 
@@ -78,24 +79,29 @@ jobs:
           python3 -c "
           import os, json, urllib.request, urllib.error
           from datetime import datetime, timezone, timedelta
+          from pathlib import Path
 
           tz = timezone(timedelta(hours=8))
           now = datetime.now(tz)
-          today = now.strftime('%Y-%m-%d')
           time_str = now.strftime('%H:%M')
 
           tokens = [os.environ.get('PUSHPLUS_TOKEN',''), os.environ.get('PUSHPLUS_TOKEN_B',''), os.environ.get('PUSHPLUS_TOKEN_C','')]
           tokens = [t for t in tokens if t]
 
-          content = f'''<h3>简知分销日报已更新</h3>
-          <p><b>日期</b>：{today} &nbsp; <b>时段</b>：{time_str}</p>
-          <p>🔗 <a href=\"https://jianzhi-dashboard.pages.dev\">在线看板（Cloudflare 国内快）</a></p>
-          <p>🔗 <a href=\"https://jnc121314.github.io/jianzhi-dashboard/\">备用链接（GitHub Pages）</a></p>'''
+          # 读取量级速览推送 HTML
+          push_file = Path('data/exports/overview_push.html')
+          if push_file.exists():
+              content = push_file.read_text(encoding='utf-8')
+              print(f'  ✅ 已加载量级速览推送HTML ({len(content)} chars)')
+          else:
+              # 回退：简单链接消息
+              content = '<h3>简知分销日报已更新</h3><p>🔗 <a href=\"https://jianzhi-dashboard.pages.dev\">在线看板</a></p>'
+              print('  ⚠️ overview_push.html 不存在，使用回退消息')
 
           for i, token in enumerate(tokens, 1):
               payload = json.dumps({
                   'token': token,
-                  'title': f'📊 简知日报 · {time_str}',
+                  'title': f'📊 量级速览 · {time_str}',
                   'content': content,
                   'template': 'html'
               }).encode('utf-8')

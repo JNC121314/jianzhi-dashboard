@@ -1,0 +1,23 @@
+# 忽略浏览器 profile（太大且含敏感 cookie）
+data/browser_profiles/
+
+# 忽略验证码截图
+data/exports/captchas/
+
+# 忽略调试截图
+data/exports/debug_*.png
+
+# 忽略旧 xlsx 导出文件（只保留最新，看板 HTML 已包含所有数据）
+# 但我们会在每次更新时 commit 当天的 xlsx 作为数据留存
+data/exports/*/export_dist_order_*.xlsx
+
+# 忽略临时文件
+data/exports/captcha_request.txt
+data/exports/captcha_response.txt
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc

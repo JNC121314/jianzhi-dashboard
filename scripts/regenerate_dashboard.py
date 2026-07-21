@@ -1,22 +1,18 @@
 #!/usr/bin/env python3
 """
-简知分销 · v8 看板重新生成 (GitHub Actions 云端版)
+简知分销 · v8 看板重新生成
 新增：渠道名→主播名映射、贡献榜钻取、每日/产品图表钻取、渠道筛选器（账号+日期）
 移除：账号流量占比环形图
 """
 
-import pandas as pd, json, os
+import pandas as pd, json
 from pathlib import Path
 from datetime import datetime
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = PROJECT_DIR / "data" / "exports"
+DATA_DIR = PROJECT_DIR / "data/exports"
 ACCOUNTS = ["毛毛矩阵", "抖音", "视频号", "严总"]
-
-# 渠道映射表路径（云端用 repo 内的文件，本地兼容旧路径）
-CHANNEL_MAP_CLOUD = PROJECT_DIR / "data" / "渠道吧.xlsx"
-CHANNEL_MAP_LOCAL = Path("/Users/a111111111/Desktop/workbuddy/简知分析/渠道吧.xlsx")
-CHANNEL_MAP_PATH = CHANNEL_MAP_CLOUD if CHANNEL_MAP_CLOUD.exists() else CHANNEL_MAP_LOCAL
+CHANNEL_MAP_PATH = Path("/Users/a111111111/Desktop/workbuddy/简知分析/渠道吧.xlsx")
 
 
 def load_channel_map():
@@ -95,14 +91,19 @@ def main():
         mdf = merged[merged["月份"] == m]
         ms = {}
 
+        # 基础维度汇总
         for prefix, group_col in [("accounts","账号"),("products","产品名称"),("channels","渠道名称")]:
             ms[prefix] = agg_group(mdf, group_col)
 
+        # 每日汇总
         daily_m = mdf.groupby("日").agg(总订单=("订单id","count"), 付费单=("付费","sum")).reset_index()
         daily_m["未付费"] = daily_m["总订单"] - daily_m["付费单"]
         ms["daily"] = {str(r["日"]): {"总订单":int(r["总订单"]),"付费单":int(r["付费单"]),"未付费":int(r["未付费"])}
                        for _,r in daily_m.iterrows()}
 
+        # === 钻取数据 ===
+
+        # 每日钻取
         daily_drill = {}
         for day, ddf in mdf.groupby("日"):
             daily_drill[str(day)] = {
@@ -112,6 +113,7 @@ def main():
             }
         ms["daily_drill"] = daily_drill
 
+        # 产品钻取
         product_drill = {}
         for prod, pdf in mdf.groupby("产品名称"):
             product_drill[str(prod)] = {
@@ -120,6 +122,7 @@ def main():
             }
         ms["product_drill"] = product_drill
 
+        # 渠道钻取
         channel_drill = {}
         for ch, cdf in mdf.groupby("渠道名称"):
             channel_drill[str(ch)] = {
@@ -128,6 +131,7 @@ def main():
             }
         ms["channel_drill"] = channel_drill
 
+        # 账号钻取（新增）：每个账号 → {products, channels}
         account_drill = {}
         for acc, adf in mdf.groupby("账号"):
             account_drill[str(acc)] = {
@@ -136,6 +140,7 @@ def main():
             }
         ms["account_drill"] = account_drill
 
+        # 账号×渠道（新增）：供渠道 Top10 账号筛选器
         account_channels = {}
         for acc in ACCOUNTS:
             adf = mdf[mdf["账号"] == acc]
@@ -145,6 +150,7 @@ def main():
                 account_channels[acc] = {}
         ms["account_channels"] = account_channels
 
+        # 账号×日×渠道（新增）：供渠道汇总日期筛选器
         account_daily_channels = {}
         for acc in ACCOUNTS:
             adf = mdf[mdf["账号"] == acc]
@@ -156,7 +162,7 @@ def main():
 
         monthly_summary[m] = ms
 
-    # ── 贡献榜 ──
+    # ── 贡献榜（全时段排名） ──
     contribution = []
     for acc in ACCOUNTS:
         adf = merged[merged["账号"] == acc]
@@ -186,15 +192,6 @@ def main():
 
     # ── 生成 HTML ──
     generate_html(data_json)
-
-    # ── 同时生成用于 GitHub Pages 的版本 ──
-    pages_dir = PROJECT_DIR / "docs"
-    pages_dir.mkdir(parents=True, exist_ok=True)
-    dashboard_html = DATA_DIR / "简知分销数据看板.html"
-    pages_index = pages_dir / "index.html"
-    pages_index.write_text(dashboard_html.read_text(encoding="utf-8"), encoding="utf-8")
-    print(f"✅ GitHub Pages 版本: {pages_index}")
-
     print(f"✅ 看板已生成: data/exports/简知分销数据看板.html")
 
 
@@ -217,6 +214,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .header{text-align:center;padding:20px 0 8px}
 .header h1{font-size:22px;color:var(--text);margin-bottom:4px}
 .header p{color:var(--text-muted);font-size:12px}
+.update-badge{display:inline-block;background:linear-gradient(135deg,var(--accent),#6366f1);color:#fff;padding:5px 16px;border-radius:20px;font-size:12px;font-weight:600;margin-top:10px;letter-spacing:.3px;white-space:nowrap}
+body.light .update-badge{color:#fff}
 
 .month-bar{display:flex;align-items:center;justify-content:center;gap:14px;margin:16px 0 20px;flex-wrap:wrap}
 .month-bar select,.filter-select{background:var(--bg-card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;min-width:130px;appearance:none;text-align:center;text-align-last:center}
@@ -232,6 +231,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .kpi .value{font-size:26px;font-weight:700}
 .kpi .sub{font-size:10px;color:var(--text-muted);margin-top:4px}
 
+/* 贡献榜 */
 .rank-list{display:flex;flex-direction:column;gap:6px}
 .rank-item{display:flex;align-items:center;gap:14px;padding:8px 10px;background:var(--bg);border-radius:8px;cursor:pointer;transition:background .15s;user-select:none}
 .rank-item:hover{background:var(--bg-hover)}
@@ -252,6 +252,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .rank-drill{display:none;padding:8px 12px 8px 56px;background:var(--bg);border-radius:0 0 8px 8px;margin-top:-2px}
 .rank-drill.show{display:flex;gap:16px;flex-wrap:wrap}
 
+/* 图表区 */
 .charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
 @media(max-width:900px){.charts-grid{grid-template-columns:1fr}}
 .chart-box{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px}
@@ -262,9 +263,11 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .chart-drill.show{display:block}
 .chart-drill h4{font-size:11px;color:var(--text-muted);margin-bottom:6px}
 
+/* 筛选器行 */
 .filter-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:0}
 .filter-row label{font-size:11px;color:var(--text-muted)}
 
+/* 表格 */
 .section{margin-bottom:22px}
 .section h2{font-size:14px;color:var(--text-head);margin-bottom:10px}
 .table-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
@@ -300,7 +303,7 @@ tr:hover{background:var(--bg-hover)}
 </head>
 <body>
 <div class="theme-toggle"><button onclick="toggleTheme()" id="tbtn">🌙</button></div>
-<div class="header"><h1>简知分销 · 日报看板</h1><p id="headerInfo"></p></div>
+<div class="header"><h1>简知分销 · 日报看板</h1><p id="headerInfo"></p><div class="update-badge" id="updateBadge"></div></div>
 
 <div class="month-bar">
   <button class="month-nav" onclick="prevMonth()">◀</button>
@@ -311,6 +314,7 @@ tr:hover{background:var(--bg-hover)}
 
 <div class="kpi-grid" id="kpiGrid"></div>
 
+<!-- 每日明细 -->
 <div class="section">
   <h2>📅 每日明细 <span class="tooltip-hint">💡 点击行展开当日各维度分布</span></h2>
   <div class="table-wrap"><table id="tblDaily">
@@ -323,11 +327,13 @@ tr:hover{background:var(--bg-hover)}
     </tr></thead><tbody id="dailyTbody"></tbody></table></div>
 </div>
 
+<!-- 贡献榜（可钻取） -->
 <div class="card">
   <h3>🏆 月度线索贡献榜 <span class="tooltip-hint">💡 点击展开查看账号在各产品/渠道的分布</span></h3>
   <div class="rank-list" id="rankList"></div>
 </div>
 
+<!-- 图表区 -->
 <div class="charts-grid">
   <div class="chart-box full">
     <h3>📈 每日线索 · 项目分布 <span class="tooltip-hint">💡 点击柱子钻取当日明细</span></h3>
@@ -351,6 +357,7 @@ tr:hover{background:var(--bg-hover)}
   </div>
 </div>
 
+<!-- 产品汇总 -->
 <div class="section">
   <h2>🎁 产品汇总 <span class="tooltip-hint">💡 点击行展开产品在各账号/渠道分布</span></h2>
   <div class="table-wrap"><table id="tblProd">
@@ -363,6 +370,7 @@ tr:hover{background:var(--bg-hover)}
     </tr></thead><tbody id="prodTbody"></tbody></table></div>
 </div>
 
+<!-- 渠道汇总（含日期+项目筛选） -->
 <div class="section">
   <h2>🔗 渠道汇总
     <span class="tooltip-hint">💡 点击行展开渠道在各产品/账号分布</span>
@@ -402,14 +410,17 @@ function currentMd(){return DATA.monthly[currentMonth]}
 
 function init(){
   document.getElementById('genTime').textContent='生成: '+DATA.generatedAt;
+  document.getElementById('updateBadge').textContent='🕐 数据更新: '+DATA.generatedAt;
   if(theme==='light')document.body.classList.add('light');
   document.getElementById('tbtn').textContent=theme==='light'?'☀️':'🌙';
   let sel=document.getElementById('monthSelect');
   MONTHS.forEach(function(m){sel.appendChild(new Option(m,m))});
   sel.value=currentMonth;
+  // 填充账号筛选器
   let opts='<option value="all">全部账号</option>';
   ACCOUNTS.forEach(function(a){opts+='<option value="'+a+'">'+a+'</option>'});
   ['chFilterAcc','chTblFilterAcc'].forEach(function(id){document.getElementById(id).innerHTML=opts});
+  // 事件委托：表格钻取
   ['dailyTbody','prodTbody','chTbody'].forEach(function(id){
     document.getElementById(id).addEventListener('click',function(e){
       let row=e.target.closest('.drill-row');
@@ -418,6 +429,7 @@ function init(){
       toggleTableDrill(row,type,key);
     });
   });
+  // 事件委托：贡献榜钻取
   document.getElementById('rankList').addEventListener('click',function(e){
     let item=e.target.closest('.rank-item');
     if(!item)return;
@@ -446,6 +458,7 @@ function renderAll(){
   updateChTblDayFilter(md);
 }
 
+// ── KPI ──
 function renderKPI(total,rate,md){
   document.getElementById('kpiGrid').innerHTML=
     mkKPI('总线索',total.总订单.toLocaleString(),'var(--accent)',currentMonth)+
@@ -455,6 +468,7 @@ function renderKPI(total,rate,md){
 }
 function mkKPI(label,value,color,sub){return'<div class="kpi"><div class="label">'+label+'</div><div class="value" style="color:'+color+'">'+value+'</div><div class="sub">'+sub+'</div></div>'}
 
+// ── 贡献榜（可钻取） ──
 function renderRanking(md,total){
   let accs=ACCOUNTS.filter(function(a){return md.accounts[a]&&md.accounts[a].总订单>0});
   accs.sort(function(a,b){return md.accounts[b].总订单-md.accounts[a].总订单});
@@ -465,6 +479,7 @@ function renderRanking(md,total){
     let d=md.accounts[a], pct=Math.round(d.总订单/maxN*100);
     let paidPct=d.总订单>0?Math.round(d.付费单/d.总订单*100):0;
     let rk=i<3?rankClass[i]:'normal';
+    let dt=md.account_drill&&md.account_drill[a];
     let drillId='rank-drill-'+a;
     h+='<div class="rank-item" data-rank-acc="'+a+'">'+
       '<div class="rank-num '+rk+'">'+(i+1)+'</div>'+
@@ -488,11 +503,14 @@ function toggleRankDrill(item){
   let drillEl=item.nextElementSibling;
   if(!drillEl||!drillEl.classList.contains('rank-drill'))return;
   let isOpen=drillEl.classList.contains('show');
+  // 关闭所有
   document.querySelectorAll('.rank-drill.show').forEach(function(el){el.classList.remove('show')});
   document.querySelectorAll('.rank-item.expanded').forEach(function(el){el.classList.remove('expanded')});
   if(!isOpen){
     let cacheKey='rank:'+acc;
-    if(!drillCache[cacheKey]){drillCache[cacheKey]=buildRankDrill(acc)}
+    if(!drillCache[cacheKey]){
+      drillCache[cacheKey]=buildRankDrill(acc);
+    }
     drillEl.innerHTML=drillCache[cacheKey];
     drillEl.classList.add('show');
     item.classList.add('expanded');
@@ -517,6 +535,7 @@ function drillCol(title,entries){
   return h+'</table></div>';
 }
 
+// ── 图表：每日线索项目分布（可钻取） ──
 function renderDailyChart(md){
   dc('daily');
   let days=Object.keys(md.daily).sort();
@@ -533,7 +552,7 @@ function renderDailyChart(md){
     type:'bar',data:{labels:labels,datasets:datasets},
     options:{
       responsive:true,maintainAspectRatio:true,
-      onClick:function(e,elts){if(elts.length>0){let idx=elts[0].index;showDailyDrill(days[idx],md)}},
+      onClick:function(e,elts){if(elts.length>0){let idx=elts[0].index,dsIdx=elts[0].datasetIndex;showDailyDrill(days[idx],datasets[dsIdx].label,md)}},
       plugins:{
         legend:{labels:{color:clr(),padding:12,usePointStyle:true,pointStyleWidth:8,font:{size:11}}},
         tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+': '+ctx.raw.toLocaleString()+'条'}}}
@@ -546,9 +565,13 @@ function renderDailyChart(md){
   });
 }
 
-function showDailyDrill(day,md){
+function showDailyDrill(day,acc,md){
   let el=document.getElementById('drillChartDaily');
-  if(lastDailyDrillDay===day&&el.classList.contains('show')){el.classList.remove('show');lastDailyDrillDay=null;return}
+  if(lastDailyDrillDay===day&&el.classList.contains('show')){
+    el.classList.remove('show');
+    lastDailyDrillDay=null;
+    return;
+  }
   let dd=md.daily_drill&&md.daily_drill[day];
   if(!dd)return;
   lastDailyDrillDay=day;
@@ -560,12 +583,16 @@ function showDailyDrill(day,md){
   setTimeout(function(){el.scrollIntoView({behavior:'smooth',block:'nearest'})},100);
 }
 
+// ── 图表：渠道 Top 10（含项目筛选） ──
 function renderChannelChart(md){
   dc('ch');
   let filterAcc=document.getElementById('chFilterAcc').value;
   let chData;
-  if(filterAcc==='all'){chData=md.channels||{}}
-  else{chData=(md.account_channels&&md.account_channels[filterAcc])||{}}
+  if(filterAcc==='all'){
+    chData=md.channels||{};
+  }else{
+    chData=(md.account_channels&&md.account_channels[filterAcc])||{};
+  }
   let chs=Object.entries(chData).sort(function(a,b){return b[1].总订单-a[1].总订单}).slice(0,10);
   if(chs.length===0)return;
   let colors=chs.map(function(_,i){return COLORS[(i+2)%COLORS.length]});
@@ -574,11 +601,15 @@ function renderChannelChart(md){
     options:{
       responsive:true,maintainAspectRatio:true,indexAxis:'y',
       plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.raw.toLocaleString()+'条'}}}},
-      scales:{x:{ticks:{color:clr(),font:{size:10}},grid:{color:cg()}},y:{ticks:{color:clr(),font:{size:10},callback:function(v){return v.length>14?v.slice(0,12)+'..':v}},grid:{display:false}}}
+      scales:{
+        x:{ticks:{color:clr(),font:{size:10}},grid:{color:cg()}},
+        y:{ticks:{color:clr(),font:{size:10},callback:function(v){return v.length>14?v.slice(0,12)+'..':v}},grid:{display:false}}
+      }
     }
   });
 }
 
+// ── 图表：产品 Top 12（可钻取） ──
 function renderProductChart(md){
   dc('prod');
   let prods=Object.entries(md.products||{}).sort(function(a,b){return b[1].总订单-a[1].总订单}).slice(0,12);
@@ -590,14 +621,21 @@ function renderProductChart(md){
       responsive:true,maintainAspectRatio:true,indexAxis:'y',
       onClick:function(e,elts){if(elts.length>0){let idx=elts[0].index;showProductDrill(prods[idx][0],md)}},
       plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.raw.toLocaleString()+'条'}}}},
-      scales:{x:{ticks:{color:clr(),font:{size:10}},grid:{color:cg()}},y:{ticks:{color:clr(),font:{size:10},callback:function(v){return v.length>18?v.slice(0,16)+'..':v}},grid:{display:false}}}
+      scales:{
+        x:{ticks:{color:clr(),font:{size:10}},grid:{color:cg()}},
+        y:{ticks:{color:clr(),font:{size:10},callback:function(v){return v.length>18?v.slice(0,16)+'..':v}},grid:{display:false}}
+      }
     }
   });
 }
 
 function showProductDrill(prod,md){
   let el=document.getElementById('drillChartProduct');
-  if(lastProductDrillId===prod&&el.classList.contains('show')){el.classList.remove('show');lastProductDrillId=null;return}
+  if(lastProductDrillId===prod&&el.classList.contains('show')){
+    el.classList.remove('show');
+    lastProductDrillId=null;
+    return;
+  }
   let d=md.product_drill&&md.product_drill[prod];
   if(!d)return;
   lastProductDrillId=prod;
@@ -608,10 +646,12 @@ function showProductDrill(prod,md){
   setTimeout(function(){el.scrollIntoView({behavior:'smooth',block:'nearest'})},100);
 }
 
+// ── 图表工具 ──
 function dc(k){if(charts[k]){charts[k].destroy();charts[k]=null}}
 function clr(){return theme==='light'?'#64748b':'#94a3b8'}
 function cg(){return theme==='light'?'#e2e8f0':'#334155'}
 
+// ── 每日明细表 ──
 function renderDailyTable(md){
   let days=Object.keys(md.daily).sort().reverse();
   document.getElementById('dailyTbody').innerHTML=days.map(function(d){
@@ -623,6 +663,7 @@ function renderDailyTable(md){
   }).join('');
 }
 
+// ── 产品汇总表 ──
 function renderProductTable(md){
   let prods=Object.entries(md.products||{}).sort(function(a,b){return b[1].总订单-a[1].总订单});
   document.getElementById('prodTbody').innerHTML=prods.map(function(e){
@@ -634,11 +675,16 @@ function renderProductTable(md){
   }).join('');
 }
 
+// ── 渠道汇总表（含日期+项目筛选器） ──
 function updateChTblDayFilter(md){
   let filterAcc=document.getElementById('chTblFilterAcc').value;
   let days=[];
-  if(filterAcc==='all'){days=Object.keys(md.daily||{}).sort().reverse()}
-  else{let adc=md.account_daily_channels&&md.account_daily_channels[filterAcc];days=adc?Object.keys(adc).sort().reverse():[]}
+  if(filterAcc==='all'){
+    days=Object.keys(md.daily||{}).sort().reverse();
+  }else{
+    let adc=md.account_daily_channels&&md.account_daily_channels[filterAcc];
+    days=adc?Object.keys(adc).sort().reverse():[];
+  }
   let sel=document.getElementById('chTblFilterDay');
   let currentVal=sel.value;
   sel.innerHTML='<option value="all">全部日期</option>';
@@ -651,11 +697,19 @@ function renderChannelTable(md){
   let filterDay=document.getElementById('chTblFilterDay').value;
   let chData;
   if(filterAcc==='all'){
-    if(filterDay==='all'){chData=md.channels||{}}
-    else{let dd=md.daily_drill&&md.daily_drill[filterDay];chData=dd?dd.channels:{}}
+    if(filterDay==='all'){
+      chData=md.channels||{};
+    }else{
+      let dd=md.daily_drill&&md.daily_drill[filterDay];
+      chData=dd?dd.channels:{};
+    }
   }else{
-    if(filterDay==='all'){chData=(md.account_channels&&md.account_channels[filterAcc])||{}}
-    else{let adc=md.account_daily_channels&&md.account_daily_channels[filterAcc];chData=(adc&&adc[filterDay])||{}}
+    if(filterDay==='all'){
+      chData=(md.account_channels&&md.account_channels[filterAcc])||{};
+    }else{
+      let adc=md.account_daily_channels&&md.account_daily_channels[filterAcc];
+      chData=(adc&&adc[filterDay])||{};
+    }
   }
   let chs=Object.entries(chData).sort(function(a,b){return b[1].总订单-a[1].总订单});
   document.getElementById('chTbody').innerHTML=chs.map(function(e){
@@ -667,6 +721,7 @@ function renderChannelTable(md){
   }).join('');
 }
 
+// ── 钻取逻辑（表格行） ──
 function toggleTableDrill(row,type,key){
   let md=currentMd(); if(!md)return;
   let id=type==='daily'?key.replace(/[^a-zA-Z0-9]/g,'_'):hashId(key);
@@ -688,10 +743,16 @@ function toggleTableDrill(row,type,key){
 
 function buildTableDrill(type,key,md){
   let drillData,sections;
-  if(type==='daily'){drillData=md.daily_drill&&md.daily_drill[key];sections=[{title:'按账号',data:drillData?drillData.accounts:{}},{title:'按产品',data:drillData?drillData.products:{}},{title:'按渠道',data:drillData?drillData.channels:{}}]}
-  else if(type==='product'){drillData=md.product_drill&&md.product_drill[key];sections=[{title:'按账号',data:drillData?drillData.accounts:{}},{title:'按渠道',data:drillData?drillData.channels:{}}]}
-  else if(type==='channel'){drillData=md.channel_drill&&md.channel_drill[key];sections=[{title:'按产品',data:drillData?drillData.products:{}},{title:'按账号',data:drillData?drillData.accounts:{}}]}
-  else return'';
+  if(type==='daily'){
+    drillData=md.daily_drill&&md.daily_drill[key];
+    sections=[{title:'按账号',data:drillData?drillData.accounts:{}},{title:'按产品',data:drillData?drillData.products:{}},{title:'按渠道',data:drillData?drillData.channels:{}}];
+  }else if(type==='product'){
+    drillData=md.product_drill&&md.product_drill[key];
+    sections=[{title:'按账号',data:drillData?drillData.accounts:{}},{title:'按渠道',data:drillData?drillData.channels:{}}];
+  }else if(type==='channel'){
+    drillData=md.channel_drill&&md.channel_drill[key];
+    sections=[{title:'按产品',data:drillData?drillData.products:{}},{title:'按账号',data:drillData?drillData.accounts:{}}];
+  }else return'';
   let html='';
   sections.forEach(function(sec){
     let entries=Object.entries(sec.data).sort(function(a,b){return b[1].总订单-a[1].总订单});
@@ -701,6 +762,7 @@ function buildTableDrill(type,key,md){
   return html;
 }
 
+// ── 排序 ──
 function sortTbl(id,col){
   let tb=document.getElementById(id).querySelector('tbody');
   let allRows=Array.from(tb.querySelectorAll('tr'));
@@ -726,6 +788,7 @@ function sortTbl(id,col){
 }
 
 function hashId(s){return s.replace(/[^a-zA-Z0-9\\u4e00-\\u9fa5]/g,'_').substring(0,50)}
+
 function onMonthChange(){currentMonth=document.getElementById('monthSelect').value;renderAll()}
 function prevMonth(){let i=MONTHS.indexOf(currentMonth);if(i>0){currentMonth=MONTHS[i-1];document.getElementById('monthSelect').value=currentMonth;renderAll()}}
 function nextMonth(){let i=MONTHS.indexOf(currentMonth);if(i<MONTHS.length-1){currentMonth=MONTHS[i+1];document.getElementById('monthSelect').value=currentMonth;renderAll()}}
@@ -734,6 +797,7 @@ init();
 </script>
 </body></html>'''
 
+    # 注入数据 JSON
     html = html.replace('__DATA_JSON__', data_json)
 
     output_path = DATA_DIR / "简知分销数据看板.html"

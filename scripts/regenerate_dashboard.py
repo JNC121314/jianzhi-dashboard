@@ -311,6 +311,18 @@ tr:hover{background:var(--bg-hover)}
 
 <div class="kpi-grid" id="kpiGrid"></div>
 
+<div class="section">
+  <h2>📅 每日明细 <span class="tooltip-hint">💡 点击行展开当日各维度分布</span></h2>
+  <div class="table-wrap"><table id="tblDaily">
+    <thead><tr>
+      <th onclick="sortTbl('tblDaily',0)">日期<span class="sort-icon">↕</span></th>
+      <th onclick="sortTbl('tblDaily',1)">总线索<span class="sort-icon">↕</span></th>
+      <th onclick="sortTbl('tblDaily',2)">付费<span class="sort-icon">↕</span></th>
+      <th onclick="sortTbl('tblDaily',3)">未付费<span class="sort-icon">↕</span></th>
+      <th onclick="sortTbl('tblDaily',4)">付费率<span class="sort-icon">↕</span></th>
+    </tr></thead><tbody id="dailyTbody"></tbody></table></div>
+</div>
+
 <div class="card">
   <h3>🏆 月度线索贡献榜 <span class="tooltip-hint">💡 点击展开查看账号在各产品/渠道的分布</span></h3>
   <div class="rank-list" id="rankList"></div>
@@ -337,18 +349,6 @@ tr:hover{background:var(--bg-hover)}
     <canvas id="chartProduct"></canvas>
     <div class="chart-drill" id="drillChartProduct"></div>
   </div>
-</div>
-
-<div class="section">
-  <h2>📅 每日明细 <span class="tooltip-hint">💡 点击行展开当日各维度分布</span></h2>
-  <div class="table-wrap"><table id="tblDaily">
-    <thead><tr>
-      <th onclick="sortTbl('tblDaily',0)">日期<span class="sort-icon">↕</span></th>
-      <th onclick="sortTbl('tblDaily',1)">总线索<span class="sort-icon">↕</span></th>
-      <th onclick="sortTbl('tblDaily',2)">付费<span class="sort-icon">↕</span></th>
-      <th onclick="sortTbl('tblDaily',3)">未付费<span class="sort-icon">↕</span></th>
-      <th onclick="sortTbl('tblDaily',4)">付费率<span class="sort-icon">↕</span></th>
-    </tr></thead><tbody id="dailyTbody"></tbody></table></div>
 </div>
 
 <div class="section">

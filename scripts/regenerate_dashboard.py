@@ -7,7 +7,10 @@
 
 import pandas as pd, json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+# 北京时间
+BJT = timezone(timedelta(hours=8))
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_DIR / "data/exports"
@@ -187,7 +190,7 @@ def main():
         "accounts": ACCOUNTS,
         "monthly": monthly_summary,
         "contribution": contribution,
-        "generatedAt": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "generatedAt": datetime.now(BJT).strftime("%Y-%m-%d %H:%M"),
     }, ensure_ascii=False)
 
     # ── 生成 HTML ──

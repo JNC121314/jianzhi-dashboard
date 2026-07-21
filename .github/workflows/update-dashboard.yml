@@ -67,22 +67,60 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx --yes wrangler@latest pages deploy docs --project-name=jianzhi-dashboard
 
-      - name: PushPlus WeChat
+      - name: PushPlus WeChat notification
+        if: always()
+        continue-on-error: true
         env:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           PUSHPLUS_TOKEN_B: ${{ secrets.PUSHPLUS_TOKEN_B }}
           PUSHPLUS_TOKEN_C: ${{ secrets.PUSHPLUS_TOKEN_C }}
         run: |
-          TODAY=$(date +'%Y-%m-%d')
-          TIME=$(TZ='Asia/Shanghai' date +'%H:%M')
-          for T in "$PUSHPLUS_TOKEN" "$PUSHPLUS_TOKEN_B" "$PUSHPLUS_TOKEN_C"; do
-            curl -s -X POST http://www.pushplus.plus/send               -H "Content-Type: application/json"               -d "{"token":"${T}","title":"📊 简知日报 · ${TIME}","content":"<h3>简知分销日报已更新</h3><p><b>日期</b>：${TODAY} &nbsp; <b>时段</b>：${TIME}</p><p>🔗 <a href='https://jianzhi-dashboard.pages.dev'>在线看板（Cloudflare 国内快）</a></p><p>🔗 <a href='https://jnc121314.github.io/jianzhi-dashboard/'>备用链接（GitHub Pages）</a></p>","template":"html"}"
-          done
-          echo "📲 PushPlus 通知已发送（3人）"
+          python3 -c "
+          import os, json, urllib.request, urllib.error
+          from datetime import datetime, timezone, timedelta
+
+          tz = timezone(timedelta(hours=8))
+          now = datetime.now(tz)
+          today = now.strftime('%Y-%m-%d')
+          time_str = now.strftime('%H:%M')
+
+          tokens = [os.environ.get('PUSHPLUS_TOKEN',''), os.environ.get('PUSHPLUS_TOKEN_B',''), os.environ.get('PUSHPLUS_TOKEN_C','')]
+          tokens = [t for t in tokens if t]
+
+          content = f'''<h3>简知分销日报已更新</h3>
+          <p><b>日期</b>：{today} &nbsp; <b>时段</b>：{time_str}</p>
+          <p>🔗 <a href=\"https://jianzhi-dashboard.pages.dev\">在线看板（Cloudflare 国内快）</a></p>
+          <p>🔗 <a href=\"https://jnc121314.github.io/jianzhi-dashboard/\">备用链接（GitHub Pages）</a></p>'''
+
+          for i, token in enumerate(tokens, 1):
+              payload = json.dumps({
+                  'token': token,
+                  'title': f'📊 简知日报 · {time_str}',
+                  'content': content,
+                  'template': 'html'
+              }).encode('utf-8')
+              req = urllib.request.Request(
+                  'http://www.pushplus.plus/send',
+                  data=payload,
+                  headers={'Content-Type': 'application/json'}
+              )
+              try:
+                  resp = urllib.request.urlopen(req, timeout=15)
+                  result = resp.read().decode('utf-8')
+                  print(f'  [{i}/{len(tokens)}] PushPlus: {result[:120]}')
+              except Exception as e:
+                  print(f'  [{i}/{len(tokens)}] PushPlus failed: {e}')
+
+          print(f'📲 PushPlus 通知已发送（{len(tokens)}人）')
+          "
 
       - name: Summary
+        if: always()
         run: |
+          TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S' > /tmp/now.txt
+          NOW=$(cat /tmp/now.txt)
           echo "## 📊 简知分销日报更新完成" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Cloudflare Pages**: https://jianzhi-dashboard.pages.dev" >> $GITHUB_STEP_SUMMARY
-          echo "**更新时间": $(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_STEP_SUMMARY
+          echo "**GitHub Pages**: https://jnc121314.github.io/jianzhi-dashboard/" >> $GITHUB_STEP_SUMMARY
+          echo "**更新时间**: ${NOW}" >> $GITHUB_STEP_SUMMARY

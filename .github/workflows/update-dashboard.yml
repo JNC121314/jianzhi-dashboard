@@ -101,7 +101,7 @@ jobs:
           for i, token in enumerate(tokens, 1):
               payload = json.dumps({
                   'token': token,
-                  'title': f'📊 量级速览 · {time_str}',
+                  'title': f'简知分销日报 · {time_str}',
                   'content': content,
                   'template': 'html'
               }).encode('utf-8')

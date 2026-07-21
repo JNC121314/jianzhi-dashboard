@@ -302,6 +302,30 @@ tr:hover{background:var(--bg-hover)}
 .theme-toggle{position:fixed;top:16px;right:20px;z-index:100}
 .theme-toggle button{background:var(--bg-card);border:1px solid var(--border);color:var(--text);border-radius:20px;padding:6px 14px;cursor:pointer;font-size:12px}
 .theme-toggle button:hover{border-color:var(--accent)}
+
+/* ── 量级速览 ── */
+.overview-section{margin-bottom:20px}
+.overview-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+.overview-title{font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px}
+.overview-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.overview-date-picker{background:var(--bg-card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}
+.overview-date-picker:focus{outline:none;border-color:var(--accent)}
+.overview-range{font-size:11px;color:var(--text-muted);background:var(--bg);padding:4px 10px;border-radius:6px;font-weight:500}
+.overview-table-wrap{border-radius:10px;border:1px solid var(--border);overflow:hidden;background:var(--bg-card)}
+.overview-table{width:100%;border-collapse:collapse;font-size:12px}
+.overview-table th{background:var(--bg-hover);color:var(--text-muted);font-weight:600;padding:9px 12px;text-align:left;border-bottom:2px solid var(--border);white-space:nowrap;font-size:11px}
+.overview-table td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.overview-table tr:last-child td{border-bottom:none}
+.overview-table tr:hover{background:var(--bg-hover)}
+.overview-group-header{background:var(--bg-hover) !important;font-weight:600;color:var(--text-head);font-size:12px}
+.overview-group-header td:first-child{padding-left:16px;display:flex;align-items:center;gap:6px}
+.overview-sub-label{font-size:10px;color:var(--text-muted);font-weight:400;margin-left:4px}
+.overview-num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;font-size:13px}
+.overview-change{text-align:right;font-variant-numeric:tabular-nums;font-size:11px;font-weight:600;min-width:56px}
+.up{color:var(--success)}.down{color:#ef4444}.flat{color:var(--text-muted)}
+.overview-total-row{background:linear-gradient(90deg,var(--bg-hover),transparent) !important;font-weight:700}
+.overview-total-row td{padding:10px 12px !important;font-size:13px}
+.overview-empty{color:var(--text-muted);font-size:12px;padding:24px;text-align:center}
 </style>
 </head>
 <body>
@@ -316,6 +340,23 @@ tr:hover{background:var(--bg-hover)}
 </div>
 
 <div class="kpi-grid" id="kpiGrid"></div>
+
+<!-- 量级速览：今日vs昨日 -->
+<div class="overview-section">
+  <div class="overview-header">
+    <div class="overview-title">📊 量级速览</div>
+    <div class="overview-controls">
+      <select class="overview-date-picker" id="ovDateSelect" onchange="renderOverview()"></select>
+      <span class="overview-range" id="ovDateRange"></span>
+    </div>
+  </div>
+  <div class="overview-table-wrap">
+    <table class="overview-table" id="ovTable">
+      <thead><tr><th style="width:40%">项目 / 渠道</th><th style="width:18%">昨日</th><th style="width:14%">变化</th><th style="width:18%">今日</th></tr></thead>
+      <tbody id="ovTbody"></tbody>
+    </table>
+  </div>
+</div>
 
 <!-- 每日明细 -->
 <div class="section">
@@ -459,6 +500,8 @@ function renderAll(){
   renderProductTable(md);
   renderChannelTable(md);
   updateChTblDayFilter(md);
+  initOverview();
+  renderOverview();
 }
 
 // ── KPI ──
@@ -724,7 +767,133 @@ function renderChannelTable(md){
   }).join('');
 }
 
-// ── 钻取逻辑（表格行） ──
+// ── 量级速览：今日 vs 昨日 ──
+let ovTargetDate=null;
+
+function getDayOfWeek(dateStr){
+  var d=new Date(dateStr.replace(/-/g,'/'));
+  return ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
+}
+
+function formatDateShort(dateStr){
+  return dateStr.slice(5); // "07-21"
+}
+
+function initOverview(){
+  var md=currentMd(); if(!md)return;
+  var days=Object.keys(md.daily||{}).sort().reverse();
+  var sel=document.getElementById('ovDateSelect');
+  sel.innerHTML='';
+  if(days.length===0){
+    sel.innerHTML='<option value="">暂无数据</option>';
+    document.getElementById('ovTbody').innerHTML='<tr><td colspan="4" class="overview-empty">本月暂无数据</td></tr>';
+    return;
+  }
+  // 默认选中最新一天
+  ovTargetDate=days[0];
+  days.forEach(function(d){
+    var opt=new Option(formatDateShort(d)+' ('+getDayOfWeek(d)+')',d);
+    if(d===ovTargetDate) opt.selected=true;
+    sel.appendChild(opt);
+  });
+}
+
+function renderOverview(){
+  var md=currentMd(); if(!md||!ovTargetDate) return;
+  var allDays=Object.keys(md.daily||{}).sort();
+  var targetIdx=allDays.indexOf(ovTargetDate);
+  if(targetIdx<0){initOverview();return;}
+
+  // 确定昨日
+  var prevDate=targetIdx>0?allDays[targetIdx-1]:null;
+
+  // 更新日期范围显示
+  var rangeEl=document.getElementById('ovDateRange');
+  if(prevDate){
+    rangeEl.textContent=formatDateShort(prevDate)+'('+getDayOfWeek(prevDate)+') → '+formatDateShort(ovTargetDate)+'('+getDayOfWeek(ovTargetDate)+')';
+  }else{
+    rangeEl.textContent=ovTargetDate+'（无前日数据）';
+  }
+
+  // 构建数据：按账号分组，每组内展示渠道明细
+  var targetDrill=md.daily_drill&&md.daily_drill[ovTargetDate];
+  var prevDrill=prevDate?(md.daily_drill&&md.daily_drill[prevDate]):null;
+
+  var html='';
+
+  // 账号级汇总（昨日+今日）
+  var accountRows=[];
+  ACCOUNTS.forEach(function(acc){
+    var tAcc=targetDrill&&targetDrill.accounts&&targetDrill.accounts[acc];
+    var pAcc=prevDrill&&prevDrill.accounts&&prevDrill.accounts[acc];
+    var tVal=tAcc?tAcc.总订单:0;
+    var pVal=pAcc?pAcc.总订单:0;
+    var chg=calcChange(pVal,tVal);
+    accountRows.push({name:acc,type:'account',tVal:tVal,pVal:pVal,chg:chg});
+
+    // 渠道明细
+    var tChs=targetDrill&&targetDrill.channels?targetDrill.channels:{};
+    var pChs=prevDrill&&prevDrill.channels?prevDrill.channels:{};
+    var channelNames=Object.keys(tChs).sort(function(a,b){return(tChs[b]?tChs[b].总订单:0)-(tChs[a]?tChs[a].总订单:0)});
+    channelNames.forEach(function(chName){
+      var tc=tChs[chName]||{总订单:0};
+      var pc=pChs[chName]||{总订单:0};
+      var cv=tc.总订单;var pv=pc.总订单;
+      var cc=calcChange(pv,cv);
+      acc+'_ch_'+chName
+      accountRows.push({name:chName,type:'channel',parent:acc,tVal:cv,pVal:pv,chg:cc});
+    });
+  });
+
+  var grandT=0,grandP=0;
+  accountRows.forEach(function(r){if(r.type==='account'){grandT+=r.tVal;grandP+=r.pVal;}});
+
+  // 按账号分组渲染
+  ACCOUNTS.forEach(function(acc){
+    var accRow=accountRows.find(function(r){return r.name===acc&&r.type==='account'});
+    if(!accRow||(accRow.tVal===0&&accRow.pVal===0)) return;
+
+    // 组头行
+    html+='<tr class="overview-group-header"><td>'+acc+'<span class="sub-label">· leads</span></td>'+
+      '<td class="overview-num">'+(accRow.pVal>0?accRow.pVal.toLocaleString():'—')+'</td>'+
+      '<td class="overview-change">'+chgBadge(accRow.chg)+'</td>'+
+      '<td class="overview-num">'+(accRow.tVal>0?accRow.tVal.toLocaleString():'—')+'</td></tr>';
+
+    // 渠道子行
+    var subRows=accountRows.filter(function(r){return r.parent===acc});
+    if(subRows.length>0){
+      subRows.forEach(function(sr){
+        html+='<tr><td style="padding-left:28px;color:var(--text-muted)">'+sr.name+'</td>'+
+          '<td class="overview-num" style="color:var(--text-muted)">'+(sr.pVal>0?sr.pVal:'—')+'</td>'+
+          '<td class="overview-change">'+chgBadge(sr.chg)+'</td>'+
+          '<td class="overview-num">'+(sr.tVal>0?sr.tVal:'—')+'</td></tr>';
+      });
+    }
+  });
+
+  // 合计行
+  var totalT=accountRows.filter(function(r){return r.type==='account'}).reduce(function(s,r){return s+r.tVal},0);
+  var totalP=accountRows.filter(function(r){return r.type==='account'}).reduce(function(s,r){return s+r.pVal},0);
+  var totalChg=calcChange(totalP,totalT);
+  html+='<tr class="overview-total-row"><td style="font-weight:700">合计</td>'+
+    '<td class="overview-num">'+totalP.toLocaleString()+'</td>'+
+    '<td class="overview-change">'+chgBadge(totalChg)+'</td>'+
+    '<td class="overview-num">'+totalT.toLocaleString()+'</td></tr>';
+
+  document.getElementById('ovTbody').innerHTML=html||'<tr><td colspan="4" class="overview-empty">该日期暂无数据</td></tr>';
+}
+
+function calcChange(prev,curr){
+  if(prev===0){return curr>0?{pct:'NEW',cls:'up'}:{pct:'0%',cls:'flat'};}
+  var pct=((curr-prev)/prev*100);
+  var sign=pct>=0?'+':'';
+  return {pct:sign+pct.toFixed(0)+'%',cls:pct>0?'up':pct<0?'down':'flat'};
+}
+
+function chgBadge(chg){
+  if(!chg) return '<span class="flat">—</span>';
+  return '<span class="'+chg.cls+'">'+chg.pct+'</span>';
+}
 function toggleTableDrill(row,type,key){
   let md=currentMd(); if(!md)return;
   let id=type==='daily'?key.replace(/[^a-zA-Z0-9]/g,'_'):hashId(key);

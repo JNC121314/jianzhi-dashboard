@@ -307,25 +307,38 @@ tr:hover{background:var(--bg-hover)}
 .overview-section{margin-bottom:20px}
 .overview-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px}
 .overview-title{font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px}
-.overview-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.overview-date-picker{background:var(--bg-card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}
-.overview-date-picker:focus{outline:none;border-color:var(--accent)}
+.ov-tabs{display:flex;gap:6px;margin-left:8px}
+.ov-tab{background:var(--bg);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:5px 14px;cursor:pointer;font-size:12px;font-weight:500;transition:all .15s}
+.ov-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.ov-tab:hover:not(.active){background:var(--bg-hover);color:var(--text)}
 .overview-range{font-size:11px;color:var(--text-muted);background:var(--bg);padding:4px 10px;border-radius:6px;font-weight:500}
 .overview-table-wrap{border-radius:10px;border:1px solid var(--border);overflow:hidden;background:var(--bg-card)}
 .overview-table{width:100%;border-collapse:collapse;font-size:12px}
 .overview-table th{background:var(--bg-hover);color:var(--text-muted);font-weight:600;padding:9px 12px;text-align:left;border-bottom:2px solid var(--border);white-space:nowrap;font-size:11px}
 .overview-table td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
 .overview-table tr:last-child td{border-bottom:none}
-.overview-table tr:hover{background:var(--bg-hover)}
-.overview-group-header{background:var(--bg-hover) !important;font-weight:600;color:var(--text-head);font-size:12px}
-.overview-group-header td:first-child{padding-left:16px;display:flex;align-items:center;gap:6px}
-.overview-sub-label{font-size:10px;color:var(--text-muted);font-weight:400;margin-left:4px}
+.overview-table tr.ov-row{cursor:pointer;transition:background .12s}
+.overview-table tr.ov-row:hover{background:var(--bg-hover)}
+.overview-table tr.ov-row.expanded{background:var(--bg-hover)}
+.overview-table tr.ov-row td:first-child::before{content:'▸ ';font-size:10px;color:var(--text-muted);margin-right:4px}
+.overview-table tr.ov-row.expanded td:first-child::before{content:'▾ ';color:var(--accent)}
 .overview-num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;font-size:13px}
 .overview-change{text-align:right;font-variant-numeric:tabular-nums;font-size:11px;font-weight:600;min-width:56px}
 .up{color:var(--success)}.down{color:#ef4444}.flat{color:var(--text-muted)}
 .overview-total-row{background:linear-gradient(90deg,var(--bg-hover),transparent) !important;font-weight:700}
 .overview-total-row td{padding:10px 12px !important;font-size:13px}
 .overview-empty{color:var(--text-muted);font-size:12px;padding:24px;text-align:center}
+.ov-drill{display:none}
+.ov-drill.show{display:table-row}
+.ov-drill td{padding:0;background:var(--bg);border-bottom:1px solid var(--border)}
+.ov-drill-inner{padding:8px 16px 8px 32px;display:flex;gap:16px;flex-wrap:wrap}
+.ov-drill-col{flex:1;min-width:160px}
+.ov-drill-col h5{font-size:10px;color:var(--text-muted);margin-bottom:4px;font-weight:500}
+.ov-drill-col table{width:100%;font-size:11px}
+.ov-drill-col td{padding:3px 6px;border:none}
+.ov-drill-col tr:nth-child(even){background:transparent}
+.ov-date-sel{background:var(--bg-card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;min-width:130px;appearance:none;text-align:center;text-align-last:center}
+.ov-date-sel:focus{outline:none;border-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -337,26 +350,29 @@ tr:hover{background:var(--bg-hover)}
   <select id="monthSelect" onchange="onMonthChange()"></select>
   <button class="month-nav" onclick="nextMonth()">▶</button>
   <span class="month-range" id="monthRange"></span>
+  <select class="ov-date-sel" id="ovDateSelect" onchange="renderOverview()" title="选择对比日期"></select>
+  <span class="overview-range" id="ovDateRange"></span>
 </div>
 
-<div class="kpi-grid" id="kpiGrid"></div>
-
-<!-- 量级速览：今日vs昨日 -->
+<!-- 量级速览：今日vs昨日（可钻取） -->
 <div class="overview-section">
   <div class="overview-header">
-    <div class="overview-title">📊 量级速览</div>
-    <div class="overview-controls">
-      <select class="overview-date-picker" id="ovDateSelect" onchange="renderOverview()"></select>
-      <span class="overview-range" id="ovDateRange"></span>
+    <div class="overview-title">📊 量级速览
+      <div class="ov-tabs">
+        <button class="ov-tab active" id="ovTabChannel" onclick="switchOvTab('channel')">按渠道</button>
+        <button class="ov-tab" id="ovTabProduct" onclick="switchOvTab('product')">按课程项目</button>
+      </div>
     </div>
   </div>
   <div class="overview-table-wrap">
     <table class="overview-table" id="ovTable">
-      <thead><tr><th style="width:40%">项目 / 渠道</th><th style="width:18%">昨日</th><th style="width:14%">变化</th><th style="width:18%">今日</th></tr></thead>
+      <thead><tr><th style="width:40%">名称</th><th style="width:18%">昨日</th><th style="width:14%">变化</th><th style="width:18%">今日</th></tr></thead>
       <tbody id="ovTbody"></tbody>
     </table>
   </div>
 </div>
+
+<div class="kpi-grid" id="kpiGrid"></div>
 
 <!-- 每日明细 -->
 <div class="section">
@@ -767,16 +783,20 @@ function renderChannelTable(md){
   }).join('');
 }
 
-// ── 量级速览：今日 vs 昨日 ──
-let ovTargetDate=null;
+// ── 量级速览：今日 vs 昨日（可钻取） ──
+let ovTargetDate=null, ovTab='channel', ovDrillKey=null;
 
 function getDayOfWeek(dateStr){
   var d=new Date(dateStr.replace(/-/g,'/'));
   return ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
 }
+function formatDateShort(dateStr){return dateStr.slice(5)}
 
-function formatDateShort(dateStr){
-  return dateStr.slice(5); // "07-21"
+function switchOvTab(tab){
+  ovTab=tab; ovDrillKey=null;
+  document.getElementById('ovTabChannel').classList.toggle('active',tab==='channel');
+  document.getElementById('ovTabProduct').classList.toggle('active',tab==='product');
+  renderOverview();
 }
 
 function initOverview(){
@@ -789,10 +809,9 @@ function initOverview(){
     document.getElementById('ovTbody').innerHTML='<tr><td colspan="4" class="overview-empty">本月暂无数据</td></tr>';
     return;
   }
-  // 默认选中最新一天
-  ovTargetDate=days[0];
+  if(!ovTargetDate||days.indexOf(ovTargetDate)<0) ovTargetDate=days[0];
   days.forEach(function(d){
-    var opt=new Option(formatDateShort(d)+' ('+getDayOfWeek(d)+')',d);
+    var opt=new Option(formatDateShort(d)+' '+getDayOfWeek(d),d);
     if(d===ovTargetDate) opt.selected=true;
     sel.appendChild(opt);
   });
@@ -803,84 +822,139 @@ function renderOverview(){
   var allDays=Object.keys(md.daily||{}).sort();
   var targetIdx=allDays.indexOf(ovTargetDate);
   if(targetIdx<0){initOverview();return;}
-
-  // 确定昨日
   var prevDate=targetIdx>0?allDays[targetIdx-1]:null;
 
-  // 更新日期范围显示
   var rangeEl=document.getElementById('ovDateRange');
   if(prevDate){
-    rangeEl.textContent=formatDateShort(prevDate)+'('+getDayOfWeek(prevDate)+') → '+formatDateShort(ovTargetDate)+'('+getDayOfWeek(ovTargetDate)+')';
+    rangeEl.textContent=formatDateShort(prevDate)+getDayOfWeek(prevDate)+' → '+formatDateShort(ovTargetDate)+getDayOfWeek(ovTargetDate);
   }else{
-    rangeEl.textContent=ovTargetDate+'（无前日数据）';
+    rangeEl.textContent=formatDateShort(ovTargetDate)+getDayOfWeek(ovTargetDate)+'（无前日）';
   }
 
-  // 构建数据：按账号分组，每组内展示渠道明细
   var targetDrill=md.daily_drill&&md.daily_drill[ovTargetDate];
   var prevDrill=prevDate?(md.daily_drill&&md.daily_drill[prevDate]):null;
 
   var html='';
+  var items=[];
+  var totalP=0,totalT=0;
 
-  // 账号级汇总（昨日+今日）
-  var accountRows=[];
-  ACCOUNTS.forEach(function(acc){
-    var tAcc=targetDrill&&targetDrill.accounts&&targetDrill.accounts[acc];
-    var pAcc=prevDrill&&prevDrill.accounts&&prevDrill.accounts[acc];
-    var tVal=tAcc?tAcc.总订单:0;
-    var pVal=pAcc?pAcc.总订单:0;
-    var chg=calcChange(pVal,tVal);
-    accountRows.push({name:acc,type:'account',tVal:tVal,pVal:pVal,chg:chg});
-
-    // 渠道明细
+  if(ovTab==='channel'){
+    // 按渠道汇总
     var tChs=targetDrill&&targetDrill.channels?targetDrill.channels:{};
     var pChs=prevDrill&&prevDrill.channels?prevDrill.channels:{};
-    var channelNames=Object.keys(tChs).sort(function(a,b){return(tChs[b]?tChs[b].总订单:0)-(tChs[a]?tChs[a].总订单:0)});
-    channelNames.forEach(function(chName){
-      var tc=tChs[chName]||{总订单:0};
-      var pc=pChs[chName]||{总订单:0};
-      var cv=tc.总订单;var pv=pc.总订单;
-      var cc=calcChange(pv,cv);
-      acc+'_ch_'+chName
-      accountRows.push({name:chName,type:'channel',parent:acc,tVal:cv,pVal:pv,chg:cc});
+    var names=Object.keys(tChs).concat(Object.keys(pChs));
+    names=[...new Set(names)];
+    names.sort(function(a,b){return(tChs[b]?tChs[b].总订单:0)-(tChs[a]?tChs[a].总订单:0)});
+    names.forEach(function(name){
+      var tv=tChs[name]?tChs[name].总订单:0;
+      var pv=pChs[name]?pChs[name].总订单:0;
+      if(tv===0&&pv===0)return;
+      items.push({name:name,tVal:tv,pVal:pv,chg:calcChange(pv,tv)});
+      totalT+=tv; totalP+=pv;
     });
-  });
+  }else{
+    // 按课程项目汇总
+    var tProds=targetDrill&&targetDrill.products?targetDrill.products:{};
+    var pProds=prevDrill&&prevDrill.products?prevDrill.products:{};
+    var names=Object.keys(tProds).concat(Object.keys(pProds));
+    names=[...new Set(names)];
+    names.sort(function(a,b){return(tProds[b]?tProds[b].总订单:0)-(tProds[a]?tProds[a].总订单:0)});
+    names.forEach(function(name){
+      var tv=tProds[name]?tProds[name].总订单:0;
+      var pv=pProds[name]?pProds[name].总订单:0;
+      if(tv===0&&pv===0)return;
+      items.push({name:name,tVal:tv,pVal:pv,chg:calcChange(pv,tv)});
+      totalT+=tv; totalP+=pv;
+    });
+  }
 
-  var grandT=0,grandP=0;
-  accountRows.forEach(function(r){if(r.type==='account'){grandT+=r.tVal;grandP+=r.pVal;}});
-
-  // 按账号分组渲染
-  ACCOUNTS.forEach(function(acc){
-    var accRow=accountRows.find(function(r){return r.name===acc&&r.type==='account'});
-    if(!accRow||(accRow.tVal===0&&accRow.pVal===0)) return;
-
-    // 组头行
-    html+='<tr class="overview-group-header"><td>'+acc+'<span class="sub-label">· leads</span></td>'+
-      '<td class="overview-num">'+(accRow.pVal>0?accRow.pVal.toLocaleString():'—')+'</td>'+
-      '<td class="overview-change">'+chgBadge(accRow.chg)+'</td>'+
-      '<td class="overview-num">'+(accRow.tVal>0?accRow.tVal.toLocaleString():'—')+'</td></tr>';
-
-    // 渠道子行
-    var subRows=accountRows.filter(function(r){return r.parent===acc});
-    if(subRows.length>0){
-      subRows.forEach(function(sr){
-        html+='<tr><td style="padding-left:28px;color:var(--text-muted)">'+sr.name+'</td>'+
-          '<td class="overview-num" style="color:var(--text-muted)">'+(sr.pVal>0?sr.pVal:'—')+'</td>'+
-          '<td class="overview-change">'+chgBadge(sr.chg)+'</td>'+
-          '<td class="overview-num">'+(sr.tVal>0?sr.tVal:'—')+'</td></tr>';
-      });
+  // 渲染行（可点击钻取）
+  items.forEach(function(it){
+    var safeId=hashId(it.name);
+    var isExpanded=(ovDrillKey===it.name);
+    html+='<tr class="ov-row'+(isExpanded?' expanded':'')+'" onclick="toggleOvDrill(\''+encodeURIComponent(it.name)+'\')">'+
+      '<td>'+it.name+'</td>'+
+      '<td class="overview-num">'+(it.pVal>0?it.pVal.toLocaleString():'—')+'</td>'+
+      '<td class="overview-change">'+chgBadge(it.chg)+'</td>'+
+      '<td class="overview-num">'+(it.tVal>0?it.tVal.toLocaleString():'—')+'</td></tr>';
+    if(isExpanded){
+      html+='<tr class="ov-drill show"><td colspan="4"><div class="ov-drill-inner" id="ovdrill-'+safeId+'">'+buildOvDrill(it.name)+'</div></td></tr>';
     }
   });
 
-  // 合计行
-  var totalT=accountRows.filter(function(r){return r.type==='account'}).reduce(function(s,r){return s+r.tVal},0);
-  var totalP=accountRows.filter(function(r){return r.type==='account'}).reduce(function(s,r){return s+r.pVal},0);
-  var totalChg=calcChange(totalP,totalT);
-  html+='<tr class="overview-total-row"><td style="font-weight:700">合计</td>'+
+  // 合计
+  html+='<tr class="overview-total-row"><td>合计</td>'+
     '<td class="overview-num">'+totalP.toLocaleString()+'</td>'+
-    '<td class="overview-change">'+chgBadge(totalChg)+'</td>'+
+    '<td class="overview-change">'+chgBadge(calcChange(totalP,totalT))+'</td>'+
     '<td class="overview-num">'+totalT.toLocaleString()+'</td></tr>';
 
   document.getElementById('ovTbody').innerHTML=html||'<tr><td colspan="4" class="overview-empty">该日期暂无数据</td></tr>';
+}
+
+function toggleOvDrill(name){
+  name=decodeURIComponent(name);
+  ovDrillKey=(ovDrillKey===name)?null:name;
+  renderOverview();
+}
+
+function buildOvDrill(name){
+  var md=currentMd(); if(!md)return'';
+  var targetDrill=md.daily_drill&&md.daily_drill[ovTargetDate];
+  if(!targetDrill)return'<span style="color:var(--text-muted);font-size:11px">无钻取数据</span>';
+
+  var html='';
+  if(ovTab==='channel'){
+    // 渠道 → 展开产品分布 + 账号分布 + 付费情况
+    var tCh=targetDrill.channels&&targetDrill.channels[name];
+    // 从 channel_drill 取该渠道的产品和账号分布
+    var cd=md.channel_drill&&md.channel_drill[name];
+    // 当日该渠道的产品分布（从 daily_drill 过滤太复杂，改用月度 channel_drill）
+    var prods=cd?Object.entries(cd.products||{}).sort(function(a,b){return b[1].总订单-a[1].总订单}).slice(0,8):[];
+    var accs=cd?Object.entries(cd.accounts||{}).sort(function(a,b){return b[1].总订单-a[1].总订单}):[];
+    if(tCh){
+      html+='<div class="ov-drill-col"><h5>当日概况</h5><table>'+
+        '<tr><td>总线索</td><td style="text-align:right;font-weight:600">'+tCh.总订单.toLocaleString()+'</td></tr>'+
+        '<tr><td>付费</td><td style="text-align:right;color:var(--success)">'+tCh.付费单.toLocaleString()+'</td></tr>'+
+        '<tr><td>未付费</td><td style="text-align:right;color:var(--text-muted)">'+tCh.未付费.toLocaleString()+'</td></tr>'+
+        '<tr><td>付费率</td><td style="text-align:right">'+(tCh.总订单>0?(tCh.付费单/tCh.总订单*100).toFixed(1):'0')+'%</td></tr>'+
+        '</table></div>';
+    }
+    if(prods.length){
+      html+='<div class="ov-drill-col"><h5>产品分布 (月度 Top '+prods.length+')</h5><table><tr><th>产品</th><th style="text-align:right">线索</th><th style="text-align:right">付费</th></tr>';
+      prods.forEach(function(e){html+='<tr><td>'+e[0]+'</td><td style="text-align:right">'+e[1].总订单.toLocaleString()+'</td><td style="text-align:right;color:var(--success)">'+e[1].付费单.toLocaleString()+'</td></tr>'});
+      html+='</table></div>';
+    }
+    if(accs.length){
+      html+='<div class="ov-drill-col"><h5>账号分布</h5><table><tr><th>账号</th><th style="text-align:right">线索</th><th style="text-align:right">付费</th></tr>';
+      accs.forEach(function(e){html+='<tr><td>'+e[0]+'</td><td style="text-align:right">'+e[1].总订单.toLocaleString()+'</td><td style="text-align:right;color:var(--success)">'+e[1].付费单.toLocaleString()+'</td></tr>'});
+      html+='</table></div>';
+    }
+  }else{
+    // 产品 → 展开渠道分布 + 账号分布
+    var pd=md.product_drill&&md.product_drill[name];
+    var chs=pd?Object.entries(pd.channels||{}).sort(function(a,b){return b[1].总订单-a[1].总订单}).slice(0,8):[];
+    var accs=pd?Object.entries(pd.accounts||{}).sort(function(a,b){return b[1].总订单-a[1].总订单}):[];
+    var tPr=targetDrill.products&&targetDrill.products[name];
+    if(tPr){
+      html+='<div class="ov-drill-col"><h5>当日概况</h5><table>'+
+        '<tr><td>总线索</td><td style="text-align:right;font-weight:600">'+tPr.总订单.toLocaleString()+'</td></tr>'+
+        '<tr><td>付费</td><td style="text-align:right;color:var(--success)">'+tPr.付费单.toLocaleString()+'</td></tr>'+
+        '<tr><td>未付费</td><td style="text-align:right;color:var(--text-muted)">'+tPr.未付费.toLocaleString()+'</td></tr>'+
+        '<tr><td>付费率</td><td style="text-align:right">'+(tPr.总订单>0?(tPr.付费单/tPr.总订单*100).toFixed(1):'0')+'%</td></tr>'+
+        '</table></div>';
+    }
+    if(chs.length){
+      html+='<div class="ov-drill-col"><h5>渠道分布 (月度 Top '+chs.length+')</h5><table><tr><th>渠道</th><th style="text-align:right">线索</th><th style="text-align:right">付费</th></tr>';
+      chs.forEach(function(e){html+='<tr><td>'+e[0]+'</td><td style="text-align:right">'+e[1].总订单.toLocaleString()+'</td><td style="text-align:right;color:var(--success)">'+e[1].付费单.toLocaleString()+'</td></tr>'});
+      html+='</table></div>';
+    }
+    if(accs.length){
+      html+='<div class="ov-drill-col"><h5>账号分布</h5><table><tr><th>账号</th><th style="text-align:right">线索</th><th style="text-align:right">付费</th></tr>';
+      accs.forEach(function(e){html+='<tr><td>'+e[0]+'</td><td style="text-align:right">'+e[1].总订单.toLocaleString()+'</td><td style="text-align:right;color:var(--success)">'+e[1].付费单.toLocaleString()+'</td></tr>'});
+      html+='</table></div>';
+    }
+  }
+  return html||'<span style="color:var(--text-muted);font-size:11px">暂无钻取数据</span>';
 }
 
 function calcChange(prev,curr){
@@ -961,9 +1035,9 @@ function sortTbl(id,col){
 
 function hashId(s){return s.replace(/[^a-zA-Z0-9\\u4e00-\\u9fa5]/g,'_').substring(0,50)}
 
-function onMonthChange(){currentMonth=document.getElementById('monthSelect').value;renderAll()}
-function prevMonth(){let i=MONTHS.indexOf(currentMonth);if(i>0){currentMonth=MONTHS[i-1];document.getElementById('monthSelect').value=currentMonth;renderAll()}}
-function nextMonth(){let i=MONTHS.indexOf(currentMonth);if(i<MONTHS.length-1){currentMonth=MONTHS[i+1];document.getElementById('monthSelect').value=currentMonth;renderAll()}}
+function onMonthChange(){currentMonth=document.getElementById('monthSelect').value;ovTargetDate=null;ovDrillKey=null;renderAll()}
+function prevMonth(){let i=MONTHS.indexOf(currentMonth);if(i>0){currentMonth=MONTHS[i-1];document.getElementById('monthSelect').value=currentMonth;ovTargetDate=null;ovDrillKey=null;renderAll()}}
+function nextMonth(){let i=MONTHS.indexOf(currentMonth);if(i<MONTHS.length-1){currentMonth=MONTHS[i+1];document.getElementById('monthSelect').value=currentMonth;ovTargetDate=null;ovDrillKey=null;renderAll()}}
 function toggleTheme(){theme=theme==='dark'?'light':'dark';document.body.classList.toggle('light');localStorage.setItem('jz8-theme',theme);document.getElementById('tbtn').textContent=theme==='light'?'☀️':'🌙';renderAll()}
 init();
 </script>

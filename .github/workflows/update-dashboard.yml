@@ -5,6 +5,9 @@ on:
     # 每天 9/11/15/19/22 点 + 0 点（UTC 对应北京时间+8）
     - cron: '0 1,3,7,11,14,16 * * *'  # UTC: 1=9点, 3=11点, 7=15点, 11=19点, 14=22点, 16=0点
   workflow_dispatch:  # 支持手动触发
+  push:
+    paths:
+      - '.github/workflows/update-dashboard.yml'
 
 permissions:
   contents: write

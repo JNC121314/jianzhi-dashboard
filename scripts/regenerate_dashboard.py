@@ -15,7 +15,7 @@ BJT = timezone(timedelta(hours=8))
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_DIR / "data/exports"
 ACCOUNTS = ["毛毛矩阵", "抖音", "视频号", "严总"]
-CHANNEL_MAP_PATH = Path("/Users/a111111111/Desktop/workbuddy/简知分析/渠道吧.xlsx")
+CHANNEL_MAP_PATH = PROJECT_DIR / "data/渠道吧.xlsx"
 
 
 def load_channel_map():
@@ -124,6 +124,17 @@ def main():
             for ch, cdf in ddf.groupby("渠道名称"):
                 ch_acc[str(ch)] = agg_group(cdf, "账号")
             day_entry["channel_accounts"] = ch_acc
+            # 产品→看板→主播（逐日，供量级速览L2/L3使用）
+            prod_acc_st = {}
+            for prod, pdf in ddf.groupby("产品名称"):
+                pa = {}
+                for acc, aaf in pdf.groupby("账号"):
+                    st = {}
+                    for streamer, sf in aaf.groupby("渠道名称"):
+                        st[str(streamer)] = {"总订单":int(sf["订单id"].count()), "付费单":int(sf["付费"].sum()), "未付费":int(sf["订单id"].count()-sf["付费"].sum())}
+                    pa[str(acc)] = st
+                prod_acc_st[str(prod)] = pa
+            day_entry["product_account_streamers"] = prod_acc_st
             daily_drill[str(day)] = day_entry
         ms["daily_drill"] = daily_drill
 
@@ -356,12 +367,12 @@ tr:hover{background:var(--bg-hover)}
   <span class="ov-range" id="ovDateRange"></span>
 </div>
 
-<!-- 量级速览：今日vs昨日分级树 -->
+<!-- 量级速览：项目→渠道→主播分级树 -->
 <div class="section" id="ovSection">
-  <h2>📊 量级速览 <span class="tooltip-hint">💡 点击项目→渠道→账号逐级展开</span></h2>
+  <h2>📊 量级速览 <span class="tooltip-hint">💡 点击项目→渠道→主播逐级展开</span></h2>
   <div class="ov-wrap">
     <table class="ov-tree" id="ovTree">
-      <thead><tr><th style="width:36%">项目 · 渠道 · 账号</th><th class="ov-num" style="width:16%">昨日</th><th class="ov-num" style="width:16%">今日</th><th class="ov-chg" style="width:12%">变化</th></tr></thead>
+      <thead><tr><th style="width:36%">项目 · 渠道 · 主播</th><th class="ov-num" id="ovPrevHead" style="width:16%">前日</th><th class="ov-num" id="ovCurrHead" style="width:16%">当日</th><th class="ov-chg" style="width:12%">变化</th></tr></thead>
       <tbody id="ovBody"></tbody>
     </table>
   </div>
@@ -778,7 +789,7 @@ function renderChannelTable(md){
   }).join('');
 }
 
-// ── 量级速览：今日 vs 昨日（三级树：项目→渠道→账号） ──
+// ── 量级速览：项目 → 渠道(看板) → 主播（三级树） ──
 let ovTargetDate=null, ovExpL1=null, ovExpL2=null;
 
 function getDayOfWeek(dateStr){
@@ -812,6 +823,10 @@ function renderOverview(){
   if(targetIdx<0){initOverview();return;}
   var prevDate=targetIdx>0?allDays[targetIdx-1]:null;
 
+  // 更新表头日期
+  document.getElementById('ovCurrHead').textContent=formatDateShort(ovTargetDate)+' '+getDayOfWeek(ovTargetDate);
+  document.getElementById('ovPrevHead').textContent=prevDate?formatDateShort(prevDate)+' '+getDayOfWeek(prevDate):'—';
+
   // 日期范围标注
   var rangeEl=document.getElementById('ovDateRange');
   if(prevDate){
@@ -823,7 +838,7 @@ function renderOverview(){
   var targetDrill=md.daily_drill&&md.daily_drill[ovTargetDate];
   var prevDrill=prevDate?(md.daily_drill&&md.daily_drill[prevDate]):null;
 
-  // 三级树构建：项目 → 渠道 → 账号
+  // 三级树：项目 → 渠道(看板账号) → 主播
   var html='';
   var totalT=0,totalP=0;
 
@@ -842,52 +857,60 @@ function renderOverview(){
     var chg=calcChange(pv,tv);
     var isL1Exp=(ovExpL1===prodName);
 
-    // L1 行：项目名 + 昨日 + 今日 + 变化
     html+='<tr class="ov-l1'+(isL1Exp?' exp':'')+'" onclick="toggleOvL1(\\''+encodeURIComponent(prodName)+'\\')">'+
       '<td>'+prodName+'</td>'+
       '<td class="ov-num">'+(pv>0?pv.toLocaleString():'—')+'</td>'+
       '<td class="ov-num">'+(tv>0?tv.toLocaleString():'—')+'</td>'+
       '<td class="ov-chg">'+chgBadge(chg)+'</td></tr>';
 
-    // L1 展开后 → L2: 渠道
+    // L2: 渠道（看板账号）
     if(isL1Exp){
-      // 该项目在今日/昨日的渠道分布
-      var tProdChs=targetDrill&&targetDrill.product_channels&&targetDrill.product_channels[prodName]?targetDrill.product_channels[prodName]:{};
-      var pProdChs=prevDrill&&prevDrill.product_channels&&prevDrill.product_channels[prodName]?prevDrill.product_channels[prodName]:{};
-      var chNames=Object.keys(tProdChs).concat(Object.keys(pProdChs));
-      chNames=[...new Set(chNames)];
-      chNames.sort(function(a,b){return(tProdChs[b]?tProdChs[b].总订单:0)-(tProdChs[a]?tProdChs[a].总订单:0)});
+      // 该项目下各看板账号的数据
+      var tAccs=targetDrill&&targetDrill.accounts?targetDrill.accounts:{};
+      var pAccs=prevDrill&&prevDrill.accounts?prevDrill.accounts:{};
 
-      chNames.forEach(function(chName){
-        var tv2=tProdChs[chName]?tProdChs[chName].总订单:0;
-        var pv2=pProdChs[chName]?pProdChs[chName].总订单:0;
-        if(tv2===0&&pv2===0)return;
-        var chg2=calcChange(pv2,tv2);
-        var isL2Exp=(ovExpL2===prodName+'|'+chName);
+      // 通过 product_account_streamers 获取该项目下有哪些账号
+      var tPASt=targetDrill&&targetDrill.product_account_streamers&&targetDrill.product_account_streamers[prodName]?targetDrill.product_account_streamers[prodName]:{};
+      var pPASt=prevDrill&&prevDrill.product_account_streamers&&prevDrill.product_account_streamers[prodName]?prevDrill.product_account_streamers[prodName]:{};
+      var accNames=Object.keys(tPASt).concat(Object.keys(pPASt));
+      accNames=[...new Set(accNames)];
+      accNames.sort(function(a,b){
+        var tva=tPASt[a]?Object.values(tPASt[a]).reduce(function(s,v){return s+v.总订单},0):0;
+        var tvb=tPASt[b]?Object.values(tPASt[b]).reduce(function(s,v){return s+v.总订单},0):0;
+        return tvb-tva;
+      });
 
-        html+='<tr class="ov-l2'+(isL2Exp?' exp':'')+'" onclick="toggleOvL2(\\''+encodeURIComponent(prodName)+'\\',\\''+encodeURIComponent(chName)+'\\')">'+
-          '<td>'+chName+'</td>'+
-          '<td class="ov-num">'+(pv2>0?pv2.toLocaleString():'—')+'</td>'+
-          '<td class="ov-num">'+(tv2>0?tv2.toLocaleString():'—')+'</td>'+
+      accNames.forEach(function(accName){
+        // 该项目→该账号的合计
+        var tvSt=tPASt[accName]?Object.values(tPASt[accName]).reduce(function(s,v){return s+v.总订单},0):0;
+        var pvSt=pPASt[accName]?Object.values(pPASt[accName]).reduce(function(s,v){return s+v.总订单},0):0;
+        var tvPaid=tPASt[accName]?Object.values(tPASt[accName]).reduce(function(s,v){return s+v.付费单},0):0;
+        var pvPaid=pPASt[accName]?Object.values(pPASt[accName]).reduce(function(s,v){return s+v.付费单},0):0;
+        if(tvSt===0&&pvSt===0)return;
+        var chg2=calcChange(pvSt,tvSt);
+        var isL2Exp=(ovExpL2===prodName+'|'+accName);
+
+        html+='<tr class="ov-l2'+(isL2Exp?' exp':'')+'" onclick="toggleOvL2(\\''+encodeURIComponent(prodName)+'\\',\\''+encodeURIComponent(accName)+'\\')">'+
+          '<td>'+accName+'</td>'+
+          '<td class="ov-num">'+(pvSt>0?pvSt.toLocaleString():'—')+'</td>'+
+          '<td class="ov-num">'+(tvSt>0?tvSt.toLocaleString():'—')+'</td>'+
           '<td class="ov-chg">'+chgBadge(chg2)+'</td></tr>';
 
-        // L2 展开后 → L3: 账号
+        // L3: 主播名
         if(isL2Exp){
-          // 该渠道下该项目在今日/昨日的账号分布
-          // 从 daily_drill 的 channel_accounts 获取该渠道的账号分布
-          var tChAccs=targetDrill&&targetDrill.channel_accounts&&targetDrill.channel_accounts[chName]?targetDrill.channel_accounts[chName]:{};
-          var pChAccs=prevDrill&&prevDrill.channel_accounts&&prevDrill.channel_accounts[chName]?prevDrill.channel_accounts[chName]:{};
-          var accNames=Object.keys(tChAccs).concat(Object.keys(pChAccs));
-          accNames=[...new Set(accNames)];
-          accNames.sort(function(a,b){return(tChAccs[b]?tChAccs[b].总订单:0)-(tChAccs[a]?tChAccs[a].总订单:0)});
+          var tStreamers=tPASt[accName]?tPASt[accName]:{};
+          var pStreamers=pPASt[accName]?pPASt[accName]:{};
+          var streamerNames=Object.keys(tStreamers).concat(Object.keys(pStreamers));
+          streamerNames=[...new Set(streamerNames)];
+          streamerNames.sort(function(a,b){return(tStreamers[b]?tStreamers[b].总订单:0)-(tStreamers[a]?tStreamers[a].总订单:0)});
 
-          accNames.forEach(function(accName){
-            var tv3=tChAccs[accName]?tChAccs[accName].总订单:0;
-            var pv3=pChAccs[accName]?pChAccs[accName].总订单:0;
+          streamerNames.forEach(function(streamerName){
+            var tv3=tStreamers[streamerName]?tStreamers[streamerName].总订单:0;
+            var pv3=pStreamers[streamerName]?pStreamers[streamerName].总订单:0;
             if(tv3===0&&pv3===0)return;
             var chg3=calcChange(pv3,tv3);
             html+='<tr class="ov-l3">'+
-              '<td>'+accName+'</td>'+
+              '<td>'+streamerName+'</td>'+
               '<td class="ov-num">'+(pv3>0?pv3.toLocaleString():'—')+'</td>'+
               '<td class="ov-num">'+(tv3>0?tv3.toLocaleString():'—')+'</td>'+
               '<td class="ov-chg">'+chgBadge(chg3)+'</td></tr>';

@@ -15,23 +15,85 @@ BJT = timezone(timedelta(hours=8))
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_DIR / "data/exports"
 ACCOUNTS = ["毛毛矩阵", "抖音", "视频号", "严总"]
-CHANNEL_MAP_PATH = PROJECT_DIR / "data/渠道吧.xlsx"
+CHANNEL_MAP_CSV = PROJECT_DIR / "data/channel_anchor_map.csv"
+CHANNEL_MAP_XLSX = PROJECT_DIR / "data/渠道吧.xlsx"
+
+# 腾讯文档在线表格配置（https://docs.qq.com/sheet/DQmZGVE9QREx6dFB0）
+ONLINE_SHEET_FILE_ID = "DQmZGVE9QREx6dFB0"
+ONLINE_SHEETS = [
+    {"sheet_id": "BB08J2", "name": "抖音-再腾", "channel_col": 0, "anchor_col": 2},
+    {"sheet_id": "c9hic3", "name": "严总",     "channel_col": 0, "anchor_col": 1},
+    {"sheet_id": "wd9plg", "name": "视频号-斯德","channel_col": 0, "anchor_col": 1},
+]
+
+
+def fetch_online_channel_map():
+    """尝试从腾讯文档在线表格获取渠道→主播映射（best-effort，失败返回 None）"""
+    try:
+        import urllib.request, csv as csv_mod, io
+        mapping = {}
+        for sheet in ONLINE_SHEETS:
+            url = f"https://docs.qq.com/api/sheet/{ONLINE_SHEET_FILE_ID}/{sheet['sheet_id']}?return_csv=true"
+            req = urllib.request.Request(url, headers={"Accept": "text/csv"})
+            resp = urllib.request.urlopen(req, timeout=10)
+            data = resp.read().decode("utf-8")
+            reader = csv_mod.reader(io.StringIO(data))
+            next(reader, None)
+            for row in reader:
+                if len(row) > max(sheet["channel_col"], sheet["anchor_col"]):
+                    ch = row[sheet["channel_col"]].strip()
+                    an = row[sheet["anchor_col"]].strip()
+                    if ch and an:
+                        mapping[ch] = an
+        if mapping:
+            print(f"  在线映射表: {len(mapping)} 条（腾讯文档在线获取）")
+            # 更新本地缓存
+            try:
+                with open(CHANNEL_MAP_CSV, "w", encoding="utf-8") as f:
+                    f.write("account,channel,anchor\n")
+                    for ch, an in mapping.items():
+                        f.write(f",{ch},{an}\n")
+                print(f"  已更新本地缓存: {CHANNEL_MAP_CSV.name}")
+            except Exception:
+                pass
+            return mapping
+    except Exception as e:
+        print(f"  ⚠️ 在线获取映射失败（{e}），使用本地缓存")
+    return None
 
 
 def load_channel_map():
-    """加载渠道→主播映射表，返回 dict"""
-    if not CHANNEL_MAP_PATH.exists():
-        print("  ⚠️ 渠道映射表不存在，跳过匹配")
-        return {}
-    df = pd.read_excel(CHANNEL_MAP_PATH)
-    mapping = {}
-    for _, row in df.iterrows():
-        channel = str(row["渠道"]).strip()
-        anchor = str(row["主播"]).strip()
-        if channel and anchor:
-            mapping[channel] = anchor
-    print(f"  渠道映射表: {len(mapping)} 条")
-    return mapping
+    """加载渠道→主播映射表：先尝试在线获取，失败则用本地 CSV / xlsx 缓存"""
+    # 1. 先尝试在线获取
+    online = fetch_online_channel_map()
+    if online:
+        return online
+    # 2. 回退到本地 CSV
+    if CHANNEL_MAP_CSV.exists():
+        import csv as csv_mod
+        mapping = {}
+        with open(CHANNEL_MAP_CSV, "r", encoding="utf-8") as f:
+            reader = csv_mod.DictReader(f)
+            for row in reader:
+                ch = row.get("channel", "").strip()
+                an = row.get("anchor", "").strip()
+                if ch and an:
+                    mapping[ch] = an
+        print(f"  渠道映射表(CSV): {len(mapping)} 条")
+        return mapping
+    # 3. 回退到旧版 xlsx
+    if CHANNEL_MAP_XLSX.exists():
+        df = pd.read_excel(CHANNEL_MAP_XLSX)
+        mapping = {}
+        for _, row in df.iterrows():
+            ch = str(row["渠道"]).strip()
+            an = str(row["主播"]).strip()
+            if ch and an:
+                mapping[ch] = an
+        print(f"  渠道映射表(XLSX): {len(mapping)} 条")
+        return mapping
+    print("  ⚠️ 渠道映射表不存在，跳过匹配")
+    return {}
 
 
 def map_channel(name, mapping):
@@ -349,7 +411,6 @@ tr:hover{background:var(--bg-hover)}
 .ov-chg{text-align:right;font-variant-numeric:tabular-nums;font-size:11px;font-weight:600;min-width:50px}
 .ov-date-sel{background:var(--bg-card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;min-width:130px;appearance:none;text-align:center;text-align-last:center}
 .ov-date-sel:focus{outline:none;border-color:var(--accent)}
-.ov-range{font-size:11px;color:var(--text-muted);padding:4px 10px;background:var(--bg);border-radius:6px;font-weight:500}
 .ov-empty{color:var(--text-muted);font-size:12px;padding:24px;text-align:center}
 .ov-hide{display:none}
 </style>
@@ -364,7 +425,6 @@ tr:hover{background:var(--bg-hover)}
   <button class="month-nav" onclick="nextMonth()">▶</button>
   <span class="month-range" id="monthRange"></span>
   <select class="ov-date-sel" id="ovDateSelect" onchange="renderOverview()" title="选择对比日期"></select>
-  <span class="ov-range" id="ovDateRange"></span>
 </div>
 
 <!-- 量级速览：项目→渠道→主播分级树 -->
@@ -826,14 +886,6 @@ function renderOverview(){
   // 更新表头日期
   document.getElementById('ovCurrHead').textContent=formatDateShort(ovTargetDate)+' '+getDayOfWeek(ovTargetDate);
   document.getElementById('ovPrevHead').textContent=prevDate?formatDateShort(prevDate)+' '+getDayOfWeek(prevDate):'—';
-
-  // 日期范围标注
-  var rangeEl=document.getElementById('ovDateRange');
-  if(prevDate){
-    rangeEl.textContent=formatDateShort(prevDate)+'('+getDayOfWeek(prevDate)+') vs '+formatDateShort(ovTargetDate)+'('+getDayOfWeek(ovTargetDate)+')';
-  }else{
-    rangeEl.textContent=formatDateShort(ovTargetDate)+'('+getDayOfWeek(ovTargetDate)+')（无前日）';
-  }
 
   var targetDrill=md.daily_drill&&md.daily_drill[ovTargetDate];
   var prevDrill=prevDate?(md.daily_drill&&md.daily_drill[prevDate]):null;

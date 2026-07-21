@@ -109,11 +109,22 @@ def main():
         # 每日钻取
         daily_drill = {}
         for day, ddf in mdf.groupby("日"):
-            daily_drill[str(day)] = {
+            day_entry = {
                 "accounts": agg_group(ddf, "账号"),
                 "products": agg_group(ddf, "产品名称"),
                 "channels": agg_group(ddf, "渠道名称"),
             }
+            # 产品→渠道（逐日）
+            prod_ch = {}
+            for prod, pdf in ddf.groupby("产品名称"):
+                prod_ch[str(prod)] = agg_group(pdf, "渠道名称")
+            day_entry["product_channels"] = prod_ch
+            # 渠道→账号（逐日）
+            ch_acc = {}
+            for ch, cdf in ddf.groupby("渠道名称"):
+                ch_acc[str(ch)] = agg_group(cdf, "账号")
+            day_entry["channel_accounts"] = ch_acc
+            daily_drill[str(day)] = day_entry
         ms["daily_drill"] = daily_drill
 
         # 产品钻取
@@ -303,42 +314,33 @@ tr:hover{background:var(--bg-hover)}
 .theme-toggle button{background:var(--bg-card);border:1px solid var(--border);color:var(--text);border-radius:20px;padding:6px 14px;cursor:pointer;font-size:12px}
 .theme-toggle button:hover{border-color:var(--accent)}
 
-/* ── 量级速览 ── */
-.overview-section{margin-bottom:20px}
-.overview-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px}
-.overview-title{font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px}
-.ov-tabs{display:flex;gap:6px;margin-left:8px}
-.ov-tab{background:var(--bg);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:5px 14px;cursor:pointer;font-size:12px;font-weight:500;transition:all .15s}
-.ov-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-.ov-tab:hover:not(.active){background:var(--bg-hover);color:var(--text)}
-.overview-range{font-size:11px;color:var(--text-muted);background:var(--bg);padding:4px 10px;border-radius:6px;font-weight:500}
-.overview-table-wrap{border-radius:10px;border:1px solid var(--border);overflow:hidden;background:var(--bg-card)}
-.overview-table{width:100%;border-collapse:collapse;font-size:12px}
-.overview-table th{background:var(--bg-hover);color:var(--text-muted);font-weight:600;padding:9px 12px;text-align:left;border-bottom:2px solid var(--border);white-space:nowrap;font-size:11px}
-.overview-table td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
-.overview-table tr:last-child td{border-bottom:none}
-.overview-table tr.ov-row{cursor:pointer;transition:background .12s}
-.overview-table tr.ov-row:hover{background:var(--bg-hover)}
-.overview-table tr.ov-row.expanded{background:var(--bg-hover)}
-.overview-table tr.ov-row td:first-child::before{content:'▸ ';font-size:10px;color:var(--text-muted);margin-right:4px}
-.overview-table tr.ov-row.expanded td:first-child::before{content:'▾ ';color:var(--accent)}
-.overview-num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;font-size:13px}
-.overview-change{text-align:right;font-variant-numeric:tabular-nums;font-size:11px;font-weight:600;min-width:56px}
-.up{color:var(--success)}.down{color:#ef4444}.flat{color:var(--text-muted)}
-.overview-total-row{background:linear-gradient(90deg,var(--bg-hover),transparent) !important;font-weight:700}
-.overview-total-row td{padding:10px 12px !important;font-size:13px}
-.overview-empty{color:var(--text-muted);font-size:12px;padding:24px;text-align:center}
-.ov-drill{display:none}
-.ov-drill.show{display:table-row}
-.ov-drill td{padding:0;background:var(--bg);border-bottom:1px solid var(--border)}
-.ov-drill-inner{padding:8px 16px 8px 32px;display:flex;gap:16px;flex-wrap:wrap}
-.ov-drill-col{flex:1;min-width:160px}
-.ov-drill-col h5{font-size:10px;color:var(--text-muted);margin-bottom:4px;font-weight:500}
-.ov-drill-col table{width:100%;font-size:11px}
-.ov-drill-col td{padding:3px 6px;border:none}
-.ov-drill-col tr:nth-child(even){background:transparent}
+/* ── 量级速览（分级树） ── */
+.ov-wrap{border-radius:10px;border:1px solid var(--border);overflow:hidden;background:var(--bg-card)}
+.ov-tree{width:100%;border-collapse:collapse;font-size:12px}
+.ov-tree th{background:var(--bg-hover);color:var(--text-muted);font-weight:600;padding:9px 12px;border-bottom:2px solid var(--border);white-space:nowrap;font-size:11px;text-align:left}
+.ov-tree th.ov-num{text-align:right}
+.ov-tree td{padding:7px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.ov-tree tr:last-child td{border-bottom:none}
+.ov-l1{font-weight:700;cursor:pointer;transition:background .12s}
+.ov-l1:hover{background:var(--bg-hover)}
+.ov-l1 td:first-child::before{content:'▸ ';font-size:10px;color:var(--text-muted);margin-right:4px}
+.ov-l1.exp td:first-child::before{content:'▾ ';color:var(--accent)}
+.ov-l2{font-weight:500;cursor:pointer;background:var(--bg);transition:background .12s}
+.ov-l2:hover{background:var(--bg-hover)}
+.ov-l2 td:first-child{padding-left:28px}
+.ov-l2 td:first-child::before{content:'▸ ';font-size:9px;color:var(--text-muted);margin-right:3px}
+.ov-l2.exp td:first-child::before{content:'▾ ';color:var(--accent)}
+.ov-l3{font-weight:400;color:var(--text-muted);background:var(--bg)}
+.ov-l3 td:first-child{padding-left:48px;font-size:11px}
+.ov-total{background:linear-gradient(90deg,var(--bg-hover),transparent) !important;font-weight:700}
+.ov-total td{padding:10px 12px !important;font-size:13px}
+.ov-num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;font-size:13px}
+.ov-chg{text-align:right;font-variant-numeric:tabular-nums;font-size:11px;font-weight:600;min-width:50px}
 .ov-date-sel{background:var(--bg-card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;min-width:130px;appearance:none;text-align:center;text-align-last:center}
 .ov-date-sel:focus{outline:none;border-color:var(--accent)}
+.ov-range{font-size:11px;color:var(--text-muted);padding:4px 10px;background:var(--bg);border-radius:6px;font-weight:500}
+.ov-empty{color:var(--text-muted);font-size:12px;padding:24px;text-align:center}
+.ov-hide{display:none}
 </style>
 </head>
 <body>
@@ -351,23 +353,16 @@ tr:hover{background:var(--bg-hover)}
   <button class="month-nav" onclick="nextMonth()">▶</button>
   <span class="month-range" id="monthRange"></span>
   <select class="ov-date-sel" id="ovDateSelect" onchange="renderOverview()" title="选择对比日期"></select>
-  <span class="overview-range" id="ovDateRange"></span>
+  <span class="ov-range" id="ovDateRange"></span>
 </div>
 
-<!-- 量级速览：今日vs昨日（可钻取） -->
-<div class="overview-section">
-  <div class="overview-header">
-    <div class="overview-title">📊 量级速览
-      <div class="ov-tabs">
-        <button class="ov-tab active" id="ovTabChannel" onclick="switchOvTab('channel')">按渠道</button>
-        <button class="ov-tab" id="ovTabProduct" onclick="switchOvTab('product')">按课程项目</button>
-      </div>
-    </div>
-  </div>
-  <div class="overview-table-wrap">
-    <table class="overview-table" id="ovTable">
-      <thead><tr><th style="width:40%">名称</th><th style="width:18%">昨日</th><th style="width:14%">变化</th><th style="width:18%">今日</th></tr></thead>
-      <tbody id="ovTbody"></tbody>
+<!-- 量级速览：今日vs昨日分级树 -->
+<div class="section" id="ovSection">
+  <h2>📊 量级速览 <span class="tooltip-hint">💡 点击项目→渠道→账号逐级展开</span></h2>
+  <div class="ov-wrap">
+    <table class="ov-tree" id="ovTree">
+      <thead><tr><th style="width:36%">项目 · 渠道 · 账号</th><th class="ov-num" style="width:16%">昨日</th><th class="ov-num" style="width:16%">今日</th><th class="ov-chg" style="width:12%">变化</th></tr></thead>
+      <tbody id="ovBody"></tbody>
     </table>
   </div>
 </div>
@@ -783,21 +778,14 @@ function renderChannelTable(md){
   }).join('');
 }
 
-// ── 量级速览：今日 vs 昨日（可钻取） ──
-let ovTargetDate=null, ovTab='channel', ovDrillKey=null;
+// ── 量级速览：今日 vs 昨日（三级树：项目→渠道→账号） ──
+let ovTargetDate=null, ovExpL1=null, ovExpL2=null;
 
 function getDayOfWeek(dateStr){
   var d=new Date(dateStr.replace(/-/g,'/'));
   return ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
 }
 function formatDateShort(dateStr){return dateStr.slice(5)}
-
-function switchOvTab(tab){
-  ovTab=tab; ovDrillKey=null;
-  document.getElementById('ovTabChannel').classList.toggle('active',tab==='channel');
-  document.getElementById('ovTabProduct').classList.toggle('active',tab==='product');
-  renderOverview();
-}
 
 function initOverview(){
   var md=currentMd(); if(!md)return;
@@ -806,7 +794,7 @@ function initOverview(){
   sel.innerHTML='';
   if(days.length===0){
     sel.innerHTML='<option value="">暂无数据</option>';
-    document.getElementById('ovTbody').innerHTML='<tr><td colspan="4" class="overview-empty">本月暂无数据</td></tr>';
+    document.getElementById('ovBody').innerHTML='<tr><td colspan="4" class="ov-empty">本月暂无数据</td></tr>';
     return;
   }
   if(!ovTargetDate||days.indexOf(ovTargetDate)<0) ovTargetDate=days[0];
@@ -824,137 +812,112 @@ function renderOverview(){
   if(targetIdx<0){initOverview();return;}
   var prevDate=targetIdx>0?allDays[targetIdx-1]:null;
 
+  // 日期范围标注
   var rangeEl=document.getElementById('ovDateRange');
   if(prevDate){
-    rangeEl.textContent=formatDateShort(prevDate)+getDayOfWeek(prevDate)+' → '+formatDateShort(ovTargetDate)+getDayOfWeek(ovTargetDate);
+    rangeEl.textContent=formatDateShort(prevDate)+'('+getDayOfWeek(prevDate)+') vs '+formatDateShort(ovTargetDate)+'('+getDayOfWeek(ovTargetDate)+')';
   }else{
-    rangeEl.textContent=formatDateShort(ovTargetDate)+getDayOfWeek(ovTargetDate)+'（无前日）';
+    rangeEl.textContent=formatDateShort(ovTargetDate)+'('+getDayOfWeek(ovTargetDate)+')（无前日）';
   }
 
   var targetDrill=md.daily_drill&&md.daily_drill[ovTargetDate];
   var prevDrill=prevDate?(md.daily_drill&&md.daily_drill[prevDate]):null;
 
+  // 三级树构建：项目 → 渠道 → 账号
   var html='';
-  var items=[];
-  var totalP=0,totalT=0;
+  var totalT=0,totalP=0;
 
-  if(ovTab==='channel'){
-    // 按渠道汇总
-    var tChs=targetDrill&&targetDrill.channels?targetDrill.channels:{};
-    var pChs=prevDrill&&prevDrill.channels?prevDrill.channels:{};
-    var names=Object.keys(tChs).concat(Object.keys(pChs));
-    names=[...new Set(names)];
-    names.sort(function(a,b){return(tChs[b]?tChs[b].总订单:0)-(tChs[a]?tChs[a].总订单:0)});
-    names.forEach(function(name){
-      var tv=tChs[name]?tChs[name].总订单:0;
-      var pv=pChs[name]?pChs[name].总订单:0;
-      if(tv===0&&pv===0)return;
-      items.push({name:name,tVal:tv,pVal:pv,chg:calcChange(pv,tv)});
-      totalT+=tv; totalP+=pv;
-    });
-  }else{
-    // 按课程项目汇总
-    var tProds=targetDrill&&targetDrill.products?targetDrill.products:{};
-    var pProds=prevDrill&&prevDrill.products?prevDrill.products:{};
-    var names=Object.keys(tProds).concat(Object.keys(pProds));
-    names=[...new Set(names)];
-    names.sort(function(a,b){return(tProds[b]?tProds[b].总订单:0)-(tProds[a]?tProds[a].总订单:0)});
-    names.forEach(function(name){
-      var tv=tProds[name]?tProds[name].总订单:0;
-      var pv=pProds[name]?pProds[name].总订单:0;
-      if(tv===0&&pv===0)return;
-      items.push({name:name,tVal:tv,pVal:pv,chg:calcChange(pv,tv)});
-      totalT+=tv; totalP+=pv;
-    });
-  }
+  // L1: 项目（产品名称）
+  var tProds=targetDrill&&targetDrill.products?targetDrill.products:{};
+  var pProds=prevDrill&&prevDrill.products?prevDrill.products:{};
+  var prodNames=Object.keys(tProds).concat(Object.keys(pProds));
+  prodNames=[...new Set(prodNames)];
+  prodNames.sort(function(a,b){return(tProds[b]?tProds[b].总订单:0)-(tProds[a]?tProds[a].总订单:0)});
 
-  // 渲染行（可点击钻取）
-  items.forEach(function(it){
-    var safeId=hashId(it.name);
-    var isExpanded=(ovDrillKey===it.name);
-    html+='<tr class="ov-row'+(isExpanded?' expanded':'')+'" onclick="toggleOvDrill(\''+encodeURIComponent(it.name)+'\')">'+
-      '<td>'+it.name+'</td>'+
-      '<td class="overview-num">'+(it.pVal>0?it.pVal.toLocaleString():'—')+'</td>'+
-      '<td class="overview-change">'+chgBadge(it.chg)+'</td>'+
-      '<td class="overview-num">'+(it.tVal>0?it.tVal.toLocaleString():'—')+'</td></tr>';
-    if(isExpanded){
-      html+='<tr class="ov-drill show"><td colspan="4"><div class="ov-drill-inner" id="ovdrill-'+safeId+'">'+buildOvDrill(it.name)+'</div></td></tr>';
+  prodNames.forEach(function(prodName){
+    var tv=tProds[prodName]?tProds[prodName].总订单:0;
+    var pv=pProds[prodName]?pProds[prodName].总订单:0;
+    if(tv===0&&pv===0)return;
+    totalT+=tv; totalP+=pv;
+    var chg=calcChange(pv,tv);
+    var isL1Exp=(ovExpL1===prodName);
+
+    // L1 行：项目名 + 昨日 + 今日 + 变化
+    html+='<tr class="ov-l1'+(isL1Exp?' exp':'')+'" onclick="toggleOvL1(\''+encodeURIComponent(prodName)+'\')">'+
+      '<td>'+prodName+'</td>'+
+      '<td class="ov-num">'+(pv>0?pv.toLocaleString():'—')+'</td>'+
+      '<td class="ov-num">'+(tv>0?tv.toLocaleString():'—')+'</td>'+
+      '<td class="ov-chg">'+chgBadge(chg)+'</td></tr>';
+
+    // L1 展开后 → L2: 渠道
+    if(isL1Exp){
+      // 该项目在今日/昨日的渠道分布
+      var tProdChs=targetDrill&&targetDrill.product_channels&&targetDrill.product_channels[prodName]?targetDrill.product_channels[prodName]:{};
+      var pProdChs=prevDrill&&prevDrill.product_channels&&prevDrill.product_channels[prodName]?prevDrill.product_channels[prodName]:{};
+      var chNames=Object.keys(tProdChs).concat(Object.keys(pProdChs));
+      chNames=[...new Set(chNames)];
+      chNames.sort(function(a,b){return(tProdChs[b]?tProdChs[b].总订单:0)-(tProdChs[a]?tProdChs[a].总订单:0)});
+
+      chNames.forEach(function(chName){
+        var tv2=tProdChs[chName]?tProdChs[chName].总订单:0;
+        var pv2=pProdChs[chName]?pProdChs[chName].总订单:0;
+        if(tv2===0&&pv2===0)return;
+        var chg2=calcChange(pv2,tv2);
+        var isL2Exp=(ovExpL2===prodName+'|'+chName);
+
+        html+='<tr class="ov-l2'+(isL2Exp?' exp':'')+'" onclick="toggleOvL2(\''+encodeURIComponent(prodName)+'\',\''+encodeURIComponent(chName)+'\')">'+
+          '<td>'+chName+'</td>'+
+          '<td class="ov-num">'+(pv2>0?pv2.toLocaleString():'—')+'</td>'+
+          '<td class="ov-num">'+(tv2>0?tv2.toLocaleString():'—')+'</td>'+
+          '<td class="ov-chg">'+chgBadge(chg2)+'</td></tr>';
+
+        // L2 展开后 → L3: 账号
+        if(isL2Exp){
+          // 该渠道下该项目在今日/昨日的账号分布
+          // 从 daily_drill 的 channel_accounts 获取该渠道的账号分布
+          var tChAccs=targetDrill&&targetDrill.channel_accounts&&targetDrill.channel_accounts[chName]?targetDrill.channel_accounts[chName]:{};
+          var pChAccs=prevDrill&&prevDrill.channel_accounts&&prevDrill.channel_accounts[chName]?prevDrill.channel_accounts[chName]:{};
+          var accNames=Object.keys(tChAccs).concat(Object.keys(pChAccs));
+          accNames=[...new Set(accNames)];
+          accNames.sort(function(a,b){return(tChAccs[b]?tChAccs[b].总订单:0)-(tChAccs[a]?tChAccs[a].总订单:0)});
+
+          accNames.forEach(function(accName){
+            var tv3=tChAccs[accName]?tChAccs[accName].总订单:0;
+            var pv3=pChAccs[accName]?pChAccs[accName].总订单:0;
+            if(tv3===0&&pv3===0)return;
+            var chg3=calcChange(pv3,tv3);
+            html+='<tr class="ov-l3">'+
+              '<td>'+accName+'</td>'+
+              '<td class="ov-num">'+(pv3>0?pv3.toLocaleString():'—')+'</td>'+
+              '<td class="ov-num">'+(tv3>0?tv3.toLocaleString():'—')+'</td>'+
+              '<td class="ov-chg">'+chgBadge(chg3)+'</td></tr>';
+          });
+        }
+      });
     }
   });
 
-  // 合计
-  html+='<tr class="overview-total-row"><td>合计</td>'+
-    '<td class="overview-num">'+totalP.toLocaleString()+'</td>'+
-    '<td class="overview-change">'+chgBadge(calcChange(totalP,totalT))+'</td>'+
-    '<td class="overview-num">'+totalT.toLocaleString()+'</td></tr>';
+  // 合计行
+  html+='<tr class="ov-total"><td>合计</td>'+
+    '<td class="ov-num">'+totalP.toLocaleString()+'</td>'+
+    '<td class="ov-num">'+totalT.toLocaleString()+'</td>'+
+    '<td class="ov-chg">'+chgBadge(calcChange(totalP,totalT))+'</td></tr>';
 
-  document.getElementById('ovTbody').innerHTML=html||'<tr><td colspan="4" class="overview-empty">该日期暂无数据</td></tr>';
+  document.getElementById('ovBody').innerHTML=html||'<tr><td colspan="4" class="ov-empty">该日期暂无数据</td></tr>';
 }
 
-function toggleOvDrill(name){
+function toggleOvL1(name){
   name=decodeURIComponent(name);
-  ovDrillKey=(ovDrillKey===name)?null:name;
+  ovExpL1=(ovExpL1===name)?null:name;
+  ovExpL2=null; // 关闭L1时也关闭L2
   renderOverview();
 }
 
-function buildOvDrill(name){
-  var md=currentMd(); if(!md)return'';
-  var targetDrill=md.daily_drill&&md.daily_drill[ovTargetDate];
-  if(!targetDrill)return'<span style="color:var(--text-muted);font-size:11px">无钻取数据</span>';
-
-  var html='';
-  if(ovTab==='channel'){
-    // 渠道 → 展开产品分布 + 账号分布 + 付费情况
-    var tCh=targetDrill.channels&&targetDrill.channels[name];
-    // 从 channel_drill 取该渠道的产品和账号分布
-    var cd=md.channel_drill&&md.channel_drill[name];
-    // 当日该渠道的产品分布（从 daily_drill 过滤太复杂，改用月度 channel_drill）
-    var prods=cd?Object.entries(cd.products||{}).sort(function(a,b){return b[1].总订单-a[1].总订单}).slice(0,8):[];
-    var accs=cd?Object.entries(cd.accounts||{}).sort(function(a,b){return b[1].总订单-a[1].总订单}):[];
-    if(tCh){
-      html+='<div class="ov-drill-col"><h5>当日概况</h5><table>'+
-        '<tr><td>总线索</td><td style="text-align:right;font-weight:600">'+tCh.总订单.toLocaleString()+'</td></tr>'+
-        '<tr><td>付费</td><td style="text-align:right;color:var(--success)">'+tCh.付费单.toLocaleString()+'</td></tr>'+
-        '<tr><td>未付费</td><td style="text-align:right;color:var(--text-muted)">'+tCh.未付费.toLocaleString()+'</td></tr>'+
-        '<tr><td>付费率</td><td style="text-align:right">'+(tCh.总订单>0?(tCh.付费单/tCh.总订单*100).toFixed(1):'0')+'%</td></tr>'+
-        '</table></div>';
-    }
-    if(prods.length){
-      html+='<div class="ov-drill-col"><h5>产品分布 (月度 Top '+prods.length+')</h5><table><tr><th>产品</th><th style="text-align:right">线索</th><th style="text-align:right">付费</th></tr>';
-      prods.forEach(function(e){html+='<tr><td>'+e[0]+'</td><td style="text-align:right">'+e[1].总订单.toLocaleString()+'</td><td style="text-align:right;color:var(--success)">'+e[1].付费单.toLocaleString()+'</td></tr>'});
-      html+='</table></div>';
-    }
-    if(accs.length){
-      html+='<div class="ov-drill-col"><h5>账号分布</h5><table><tr><th>账号</th><th style="text-align:right">线索</th><th style="text-align:right">付费</th></tr>';
-      accs.forEach(function(e){html+='<tr><td>'+e[0]+'</td><td style="text-align:right">'+e[1].总订单.toLocaleString()+'</td><td style="text-align:right;color:var(--success)">'+e[1].付费单.toLocaleString()+'</td></tr>'});
-      html+='</table></div>';
-    }
-  }else{
-    // 产品 → 展开渠道分布 + 账号分布
-    var pd=md.product_drill&&md.product_drill[name];
-    var chs=pd?Object.entries(pd.channels||{}).sort(function(a,b){return b[1].总订单-a[1].总订单}).slice(0,8):[];
-    var accs=pd?Object.entries(pd.accounts||{}).sort(function(a,b){return b[1].总订单-a[1].总订单}):[];
-    var tPr=targetDrill.products&&targetDrill.products[name];
-    if(tPr){
-      html+='<div class="ov-drill-col"><h5>当日概况</h5><table>'+
-        '<tr><td>总线索</td><td style="text-align:right;font-weight:600">'+tPr.总订单.toLocaleString()+'</td></tr>'+
-        '<tr><td>付费</td><td style="text-align:right;color:var(--success)">'+tPr.付费单.toLocaleString()+'</td></tr>'+
-        '<tr><td>未付费</td><td style="text-align:right;color:var(--text-muted)">'+tPr.未付费.toLocaleString()+'</td></tr>'+
-        '<tr><td>付费率</td><td style="text-align:right">'+(tPr.总订单>0?(tPr.付费单/tPr.总订单*100).toFixed(1):'0')+'%</td></tr>'+
-        '</table></div>';
-    }
-    if(chs.length){
-      html+='<div class="ov-drill-col"><h5>渠道分布 (月度 Top '+chs.length+')</h5><table><tr><th>渠道</th><th style="text-align:right">线索</th><th style="text-align:right">付费</th></tr>';
-      chs.forEach(function(e){html+='<tr><td>'+e[0]+'</td><td style="text-align:right">'+e[1].总订单.toLocaleString()+'</td><td style="text-align:right;color:var(--success)">'+e[1].付费单.toLocaleString()+'</td></tr>'});
-      html+='</table></div>';
-    }
-    if(accs.length){
-      html+='<div class="ov-drill-col"><h5>账号分布</h5><table><tr><th>账号</th><th style="text-align:right">线索</th><th style="text-align:right">付费</th></tr>';
-      accs.forEach(function(e){html+='<tr><td>'+e[0]+'</td><td style="text-align:right">'+e[1].总订单.toLocaleString()+'</td><td style="text-align:right;color:var(--success)">'+e[1].付费单.toLocaleString()+'</td></tr>'});
-      html+='</table></div>';
-    }
-  }
-  return html||'<span style="color:var(--text-muted);font-size:11px">暂无钻取数据</span>';
+function toggleOvL2(l1,l2){
+  l1=decodeURIComponent(l1); l2=decodeURIComponent(l2);
+  var key=l1+'|'+l2;
+  ovExpL2=(ovExpL2===key)?null:key;
+  renderOverview();
 }
 
 function calcChange(prev,curr){
@@ -1035,9 +998,9 @@ function sortTbl(id,col){
 
 function hashId(s){return s.replace(/[^a-zA-Z0-9\\u4e00-\\u9fa5]/g,'_').substring(0,50)}
 
-function onMonthChange(){currentMonth=document.getElementById('monthSelect').value;ovTargetDate=null;ovDrillKey=null;renderAll()}
-function prevMonth(){let i=MONTHS.indexOf(currentMonth);if(i>0){currentMonth=MONTHS[i-1];document.getElementById('monthSelect').value=currentMonth;ovTargetDate=null;ovDrillKey=null;renderAll()}}
-function nextMonth(){let i=MONTHS.indexOf(currentMonth);if(i<MONTHS.length-1){currentMonth=MONTHS[i+1];document.getElementById('monthSelect').value=currentMonth;ovTargetDate=null;ovDrillKey=null;renderAll()}}
+function onMonthChange(){currentMonth=document.getElementById('monthSelect').value;ovTargetDate=null;ovExpL1=null;ovExpL2=null;renderAll()}
+function prevMonth(){let i=MONTHS.indexOf(currentMonth);if(i>0){currentMonth=MONTHS[i-1];document.getElementById('monthSelect').value=currentMonth;ovTargetDate=null;ovExpL1=null;ovExpL2=null;renderAll()}}
+function nextMonth(){let i=MONTHS.indexOf(currentMonth);if(i<MONTHS.length-1){currentMonth=MONTHS[i+1];document.getElementById('monthSelect').value=currentMonth;ovTargetDate=null;ovExpL1=null;ovExpL2=null;renderAll()}}
 function toggleTheme(){theme=theme==='dark'?'light':'dark';document.body.classList.toggle('light');localStorage.setItem('jz8-theme',theme);document.getElementById('tbtn').textContent=theme==='light'?'☀️':'🌙';renderAll()}
 init();
 </script>

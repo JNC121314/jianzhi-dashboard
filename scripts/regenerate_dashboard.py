@@ -843,7 +843,7 @@ function renderOverview(){
     var isL1Exp=(ovExpL1===prodName);
 
     // L1 行：项目名 + 昨日 + 今日 + 变化
-    html+='<tr class="ov-l1'+(isL1Exp?' exp':'')+'" onclick="toggleOvL1(\''+encodeURIComponent(prodName)+'\')">'+
+    html+='<tr class="ov-l1'+(isL1Exp?' exp':'')+'" onclick="toggleOvL1(\\''+encodeURIComponent(prodName)+'\\')">'+
       '<td>'+prodName+'</td>'+
       '<td class="ov-num">'+(pv>0?pv.toLocaleString():'—')+'</td>'+
       '<td class="ov-num">'+(tv>0?tv.toLocaleString():'—')+'</td>'+
@@ -865,7 +865,7 @@ function renderOverview(){
         var chg2=calcChange(pv2,tv2);
         var isL2Exp=(ovExpL2===prodName+'|'+chName);
 
-        html+='<tr class="ov-l2'+(isL2Exp?' exp':'')+'" onclick="toggleOvL2(\''+encodeURIComponent(prodName)+'\',\''+encodeURIComponent(chName)+'\')">'+
+        html+='<tr class="ov-l2'+(isL2Exp?' exp':'')+'" onclick="toggleOvL2(\\''+encodeURIComponent(prodName)+'\\',\\''+encodeURIComponent(chName)+'\\')">'+
           '<td>'+chName+'</td>'+
           '<td class="ov-num">'+(pv2>0?pv2.toLocaleString():'—')+'</td>'+
           '<td class="ov-num">'+(tv2>0?tv2.toLocaleString():'—')+'</td>'+

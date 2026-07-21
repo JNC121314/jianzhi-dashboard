@@ -1,0 +1,116 @@
+name: 定时任务监控（自动排查）
+
+on:
+  schedule:
+    # 主任务 cron: 0 1,3,7,11,14,16 (北京时间 9/11/15/19/22/0)
+    # 监控在25分钟后运行: 25 1,3,7,11,14,16
+    - cron: '25 1,3,7,11,14,16 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check main workflow status and auto-fix
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 -c "
+          import os, json, urllib.request, urllib.error
+          from datetime import datetime, timezone, timedelta
+
+          tz = timezone(timedelta(hours=8))
+          now = datetime.now(tz)
+
+          token = os.environ['GH_TOKEN']
+          headers = {'Authorization': f'token {token}', 'Accept': 'application/vnd.github+json'}
+          repo = os.environ.get('GITHUB_REPOSITORY', 'JNC121314/jianzhi-dashboard')
+
+          def api(path, method='GET'):
+              url = f'https://api.github.com/repos/{repo}/{path}'
+              req = urllib.request.Request(url, headers=headers, method=method)
+              try:
+                  resp = urllib.request.urlopen(req, timeout=30)
+                  return json.loads(resp.read().decode())
+              except urllib.error.HTTPError as e:
+                  return json.loads(e.read().decode())
+              except Exception as e:
+                  return {'error': str(e)}
+
+          # 获取最新的 update-dashboard workflow run
+          runs = api('actions/runs?per_page=5')
+          latest = None
+          for run in runs.get('workflow_runs', []):
+              if run.get('name') == '简知分销日报更新' or 'update-dashboard' in run.get('path', ''):
+                  latest = run
+                  break
+
+          if not latest:
+              print('❌ 未找到 update-dashboard workflow run，触发新 run')
+              api('actions/workflows/update-dashboard.yml/dispatches', 'POST') if False else None
+              # 用 urllib 发 POST
+              url = f'https://api.github.com/repos/{repo}/actions/workflows/update-dashboard.yml/dispatches'
+              data = json.dumps({'ref': 'main'}).encode()
+              req = urllib.request.Request(url, data=data, headers={**headers, 'Content-Type': 'application/json'}, method='POST')
+              urllib.request.urlopen(req, timeout=15)
+              print('✅ 已触发新 workflow run')
+          else:
+              status = latest.get('status')
+              conclusion = latest.get('conclusion')
+              run_num = latest.get('run_number')
+              run_id = latest.get('id')
+              created = latest.get('created_at')
+
+              print(f'最新 Run #{run_num}: status={status}, conclusion={conclusion}, created={created}')
+
+              if status in ('in_progress', 'queued', 'waiting'):
+                  print(f'⏳ Run #{run_num} 仍在执行中，无需干预')
+              elif conclusion == 'success':
+                  # 验证 Cloudflare Pages 是否真的更新了
+                  try:
+                      cf_url = 'https://jianzhi-dashboard.pages.dev'
+                      req2 = urllib.request.Request(cf_url, headers={'User-Agent': 'Monitor'})
+                      resp2 = urllib.request.urlopen(req2, timeout=15)
+                      html = resp2.read().decode('utf-8', errors='replace')
+                      import re
+                      ts = re.findall(r'数据更新[^<]*', html)
+                      if ts:
+                          print(f'✅ Run #{run_num} 成功，看板已更新 ({ts[0]})')
+                      else:
+                          print(f'✅ Run #{run_num} 成功，看板可访问')
+                  except Exception as e:
+                      print(f'✅ Run #{run_num} 成功（看板验证跳过: {e}）')
+              elif conclusion == 'failure':
+                  # 排查失败原因
+                  jobs = api(f'actions/runs/{run_id}/jobs')
+                  failed_steps = []
+                  for job in jobs.get('jobs', []):
+                      for step in job.get('steps', []):
+                          if step.get('conclusion') == 'failure':
+                              failed_steps.append(step.get('name', 'unknown'))
+
+                  print(f'❌ Run #{run_num} 失败，失败步骤: {failed_steps}')
+
+                  # 判断是否需要重新触发
+                  critical_failures = [s for s in failed_steps if 'PushPlus' not in s and 'notification' not in s.lower()]
+                  if critical_failures:
+                      print(f'⚠️ 关键步骤失败: {critical_failures}，自动重新触发 workflow')
+                      url = f'https://api.github.com/repos/{repo}/actions/workflows/update-dashboard.yml/dispatches'
+                      data = json.dumps({'ref': 'main'}).encode()
+                      req = urllib.request.Request(url, data=data, headers={**headers, 'Content-Type': 'application/json'}, method='POST')
+                      urllib.request.urlopen(req, timeout=15)
+                      print(f'✅ 已重新触发 workflow (因 {critical_failures} 失败)')
+                  else:
+                      print(f'ℹ️ 仅非关键步骤失败 ({failed_steps})，看板数据应该已正常部署，跳过重新触发')
+              else:
+                  print(f'⚠️ Run #{run_num} 状态异常: {conclusion}')
+
+          print(f'\\n监控时间: {now.strftime(\"%Y-%m-%d %H:%M:%S\")}')
+          "

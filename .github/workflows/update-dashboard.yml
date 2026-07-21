@@ -73,41 +73,36 @@ jobs:
         env:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
         run: |
-          # 提取数据摘要
-          MONTH=$(date +'%Y-%m')
           TODAY=$(date +'%Y-%m-%d')
-          TIME=$(TZ='Asia/Shanghai' date +'%H:%M')
-
-          # 从 export_results.json 提取信息
-          ACCOUNTS=""
+          TIME_VAR=$(TZ='Asia/Shanghai' date +'%H:%M')
+          ACCOUNTS="无"
           FILE_COUNT=0
           if [ -f data/exports/export_results.json ]; then
-            ACCOUNTS=$(python3 -c "import json; d=json.load(open('data/exports/export_results.json')); print(','.join(d.get('accounts',[])))")
-            FILE_COUNT=$(python3 -c "import json; d=json.load(open('data/exports/export_results.json')); print(len(d.get('files',[])))")
+            ACCOUNTS=$(python3 -c "import json;d=json.load(open('data/exports/export_results.json'));print(','.join(d.get('accounts',[])))")
+            FILE_COUNT=$(python3 -c "import json;d=json.load(open('data/exports/export_results.json'));print(len(d.get('files',[])))")
           fi
-
-          # 构建通知内容
-          TITLE="📊 简知日报 · ${TIME}"
-
-          CONTENT="<h3>简知分销日报已更新</h3>"
-          CONTENT+="<p><b>日期</b>：${TODAY}　　　<b>时段</b>：${TIME}</p>"
-          CONTENT+="<p><b>导出账号</b>：${ACCOUNTS}（${FILE_COUNT}个文件）</p>"
-          CONTENT+="<hr>"
-          CONTENT+="<p>🔗 <a href='https://jianzhi-dashboard.pages.dev'>点击查看在线看板（Cloudflare 国内快）</a></p>"
-          CONTENT+="<p>🔗 <a href='https://jnc121314.github.io/jianzhi-dashboard/'>备用链接（GitHub Pages）</a></p>"
-
-          curl -s -X POST http://www.pushplus.plus/send \
-            -H "Content-Type: application/json" \
-            -d "$(python3 -c "
-import json
-print(json.dumps({
-    'token': '${PUSHPLUS_TOKEN}',
-    'title': '${TITLE}',
-    'content': '''${CONTENT}''',
+          cat > /tmp/pushplus_msg.py << 'PYEOF'
+import json, os, requests
+today = os.environ['PUSH_TODAY']
+time_var = os.environ['PUSH_TIME']
+accounts = os.environ['PUSH_ACCOUNTS']
+file_count = os.environ['PUSH_FILE_COUNT']
+token = os.environ['PUSHPLUS_TOKEN']
+content = f"""<h3>简知分销日报已更新</h3>
+<p><b>日期</b>：{today}　　<b>时段</b>：{time_var}</p>
+<p><b>导出账号</b>：{accounts}（{file_count}个文件）</p>
+<hr>
+<p>🔗 <a href='https://jianzhi-dashboard.pages.dev'>点击查看在线看板（Cloudflare 国内快）</a></p>
+<p>🔗 <a href='https://jnc121314.github.io/jianzhi-dashboard/'>备用链接（GitHub Pages）</a></p>"""
+r = requests.post('http://www.pushplus.plus/send', json={
+    'token': token,
+    'title': f'📊 简知日报 · {time_var}',
+    'content': content,
     'template': 'html'
-}))
-")"
-
+})
+print('PushPlus response:', r.status_code, r.text[:100])
+PYEOF
+          PUSH_TODAY="$TODAY" PUSH_TIME="$TIME_VAR" PUSH_ACCOUNTS="$ACCOUNTS" PUSH_FILE_COUNT="$FILE_COUNT" python3 /tmp/pushplus_msg.py
           echo "📲 PushPlus 微信通知已发送"
 
       - name: Summary

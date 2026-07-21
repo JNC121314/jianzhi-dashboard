@@ -68,13 +68,17 @@ jobs:
       - name: PushPlus WeChat
         env:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          PUSHPLUS_TOKEN_B: ${{ secrets.PUSHPLUS_TOKEN_B }}
+          PUSHPLUS_TOKEN_C: ${{ secrets.PUSHPLUS_TOKEN_C }}
         run: |
           TODAY=$(date +'%Y-%m-%d')
           TIME=$(TZ='Asia/Shanghai' date +'%H:%M')
-          curl -s -X POST http://www.pushplus.plus/send \
-            -H "Content-Type: application/json" \
-            -d "{\"token\":\"${PUSHPLUS_TOKEN}\",\"title\":\"📊 简知日报 · ${TIME}\",\"content\":\"<h3>简知分销日报已更新</h3><p><b>日期</b>：${TODAY} &nbsp; <b>时段</b>：${TIME}</p><p>🔗 <a href='https://jianzhi-dashboard.pages.dev'>在线看板（Cloudflare 国内快）</a></p><p>🔗 <a href='https://jnc121314.github.io/jianzhi-dashboard/'>备用链接（GitHub Pages）</a></p>\",\"template\":\"html\"}"
-          echo "📲 PushPlus 通知已发送"
+          for T in "$PUSHPLUS_TOKEN" "$PUSHPLUS_TOKEN_B" "$PUSHPLUS_TOKEN_C"; do
+            curl -s -X POST http://www.pushplus.plus/send \
+              -H "Content-Type: application/json" \
+              -d "{\"token\":\"${T}\",\"title\":\"📊 简知日报 · ${TIME}\",\"content\":\"<h3>简知分销日报已更新</h3><p><b>日期</b>：${TODAY} &nbsp; <b>时段</b>：${TIME}</p><p>🔗 <a href='https://jianzhi-dashboard.pages.dev'>在线看板（Cloudflare 国内快）</a></p><p>🔗 <a href='https://jnc121314.github.io/jianzhi-dashboard/'>备用链接（GitHub Pages）</a></p>\",\"template\":\"html\"}"
+          done
+          echo "📲 PushPlus 通知已发送（3人）"
 
       - name: Summary
         run: |

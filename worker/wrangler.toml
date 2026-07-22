@@ -1,0 +1,12 @@
+name = "jianzhi-dashboard-trigger"
+main = "worker.js"
+compatibility_date = "2025-07-22"
+
+[triggers]
+crons = ["0 1,3,7,11,14,16 * * *"]
+
+[[d1_databases]]
+binding = "DB"
+
+[vars]
+REPO = "JNC121314/jianzhi-dashboard"

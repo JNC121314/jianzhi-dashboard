@@ -2,7 +2,7 @@ name: 简知分销日报更新
 
 on:
   schedule:
-    - cron: '0 1,3,7,11,14,16 * * *'
+    - cron: '0,5 1,3,7,11,14,16 * * *'
   workflow_dispatch:
 
 permissions:
@@ -16,12 +16,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Deduplication check
+        id: dedup
+        run: |
+          LAST_MSG=$(git log -1 --format=%s)
+          LAST_TIME=$(git log -1 --format=%ct)
+          NOW=$(date +%s)
+          DIFF=$((NOW - LAST_TIME))
+          if echo "$LAST_MSG" | grep -q "日报更新" && [ $DIFF -lt 420 ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "⏭️ 最近 7 分钟内已更新，跳过本次重复触发"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Setup Python
+        if: steps.dedup.outputs.skip != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
 
       - name: Cache pip packages
+        if: steps.dedup.outputs.skip != 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
@@ -29,12 +45,15 @@ jobs:
           restore-keys: pip-
 
       - name: Install Python dependencies
+        if: steps.dedup.outputs.skip != 'true'
         run: pip install -r scripts/requirements.txt
 
       - name: Install Playwright browsers
+        if: steps.dedup.outputs.skip != 'true'
         run: playwright install chromium
 
       - name: Cache browser profiles
+        if: steps.dedup.outputs.skip != 'true'
         uses: actions/cache@v4
         with:
           path: data/browser_profiles
@@ -42,19 +61,23 @@ jobs:
           restore-keys: browser-profiles-
 
       - name: Run data export
+        if: steps.dedup.outputs.skip != 'true'
         env:
           ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
         run: python scripts/jianzhi_export_v2.py
 
       - name: Generate dashboard HTML
+        if: steps.dedup.outputs.skip != 'true'
         run: python scripts/regenerate_dashboard.py
 
       - name: Copy dashboard to docs
+        if: steps.dedup.outputs.skip != 'true'
         run: |
           mkdir -p docs
           cp data/exports/简知分销数据看板.html docs/index.html
 
       - name: Commit and push
+        if: steps.dedup.outputs.skip != 'true'
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
@@ -63,13 +86,14 @@ jobs:
           git push
 
       - name: Deploy to Cloudflare Pages
+        if: steps.dedup.outputs.skip != 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx --yes wrangler@latest pages deploy docs --project-name=jianzhi-dashboard
 
       - name: PushPlus WeChat notification
-        if: always()
+        if: always() && steps.dedup.outputs.skip != 'true'
         continue-on-error: true
         env:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}

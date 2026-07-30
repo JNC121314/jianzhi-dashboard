@@ -597,7 +597,7 @@ tr:hover{background:var(--bg-hover)}
   <select id="monthSelect" onchange="onMonthChange()"></select>
   <button class="month-nav" onclick="nextMonth()">▶</button>
   <span class="month-range" id="monthRange"></span>
-  <select class="ov-date-sel" id="ovDateSelect" onchange="renderOverview()" title="选择对比日期"></select>
+  <select class="ov-date-sel" id="ovDateSelect" onchange="changeOvDate()" title="选择对比日期"></select>
 </div>
 
 <!-- 量级速览：项目→渠道→主播分级树 -->
@@ -1047,6 +1047,12 @@ function initOverview(){
     if(d===ovTargetDate) opt.selected=true;
     sel.appendChild(opt);
   });
+}
+
+function changeOvDate(){
+  ovTargetDate=document.getElementById('ovDateSelect').value;
+  ovExpL1=null; ovExpL2=null;
+  renderOverview();
 }
 
 function renderOverview(){

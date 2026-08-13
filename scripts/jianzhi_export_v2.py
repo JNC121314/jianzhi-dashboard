@@ -47,6 +47,7 @@ else:
         {"name": "抖音", "phone": "18702789731", "password": "Zaiteng121314!"},
         {"name": "视频号", "phone": "18702775394", "password": "lz19990102@"},
         {"name": "严总", "phone": "18371236753", "password": "yy123456@"},
+        {"name": "王颖瑜伽", "phone": "13797076665", "password": "Yy19990102@"},
     ]
 
 MAX_CAPTCHA_RETRIES = 5

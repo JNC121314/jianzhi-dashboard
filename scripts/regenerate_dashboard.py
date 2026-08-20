@@ -14,7 +14,7 @@ BJT = timezone(timedelta(hours=8))
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_DIR / "data/exports"
-ACCOUNTS = ["毛毛矩阵", "抖音", "视频号", "严总", "王颖瑜伽"]
+ACCOUNTS = ["毛毛矩阵", "抖音", "视频号", "严总", "王颖瑜伽", "黄老师"]
 CHANNEL_MAP_CSV = PROJECT_DIR / "data/channel_anchor_map.csv"
 CHANNEL_MAP_XLSX = PROJECT_DIR / "data/渠道吧.xlsx"
 

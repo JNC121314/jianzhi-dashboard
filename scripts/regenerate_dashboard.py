@@ -294,18 +294,16 @@ def _fmt_num(n):
 
 
 def _chg_badge(prev, curr):
-    """计算变化率并返回带颜色的 HTML span"""
     if prev == 0:
         if curr > 0:
-            return '<span style="color:#22c55e;font-weight:700">NEW</span>'
-        return '<span style="color:#64748b">0%</span>'
+            return '<span class="up">NEW</span>'
+        return '<span class="zero">0%</span>'
     pct = (curr - prev) / prev * 100
     if pct > 0:
-        return f'<span style="color:#22c55e;font-weight:700">+{pct:.0f}%</span>'
+        return f'<span class="up">+{pct:.0f}%</span>'
     elif pct < 0:
-        return f'<span style="color:#ef4444;font-weight:700">{pct:.0f}%</span>'
-    else:
-        return '<span style="color:#64748b">0%</span>'
+        return f'<span class="dn">{pct:.0f}%</span>'
+    return '<span class="zero">0%</span>'
 
 
 def _day_of_week(date_str):
@@ -323,7 +321,6 @@ def _fmt_date_short(date_str):
 
 
 def generate_push_overview(monthly_summary, months_all, ch_map, contribution):
-    """生成量级速览推送 HTML（1:1 匹配看板 UI，内联 CSS 适配微信端）"""
     if not months_all:
         return "<p>暂无数据</p>"
 
@@ -331,128 +328,105 @@ def generate_push_overview(monthly_summary, months_all, ch_map, contribution):
     ms = monthly_summary.get(curr_month, {})
     daily = ms.get("daily", {})
     daily_drill = ms.get("daily_drill", {})
-
     if not daily:
         return f"<p>{curr_month} 暂无数据</p>"
 
     all_days = sorted(daily.keys())
     target_date = all_days[-1]
     prev_date = all_days[-2] if len(all_days) >= 2 else None
-
     target_drill = daily_drill.get(target_date, {})
     prev_drill = daily_drill.get(prev_date, {}) if prev_date else {}
 
-    # 构建三级树
-    rows_html = ""
-    total_t, total_p = 0, 0
+    rows = ""
+    total_t = total_p = 0
 
-    # L1: 项目
     t_prods = target_drill.get("products", {})
     p_prods = prev_drill.get("products", {})
     prod_names = sorted(set(list(t_prods.keys()) + list(p_prods.keys())),
                         key=lambda x: -(t_prods.get(x, {}).get("总订单", 0)))
 
-    for prod_name in prod_names:
-        tv = t_prods.get(prod_name, {}).get("总订单", 0)
-        pv = p_prods.get(prod_name, {}).get("总订单", 0)
+    for pn in prod_names:
+        tv = t_prods.get(pn, {}).get("总订单", 0)
+        pv = p_prods.get(pn, {}).get("总订单", 0)
         if tv == 0 and pv == 0:
             continue
         total_t += tv
         total_p += pv
+        rows += f'<tr><td class=l1>▾ {pn}</td><td class=l1v>{_fmt_num(pv)}</td><td class=l1v>{_fmt_num(tv)}</td><td class=l1b>{_chg_badge(pv, tv)}</td></tr>'
 
-        rows_html += f'''<tr>
-<td style="padding:8px 10px;border-bottom:1px solid #334155;font-weight:700;font-size:13px;color:#e2e8f0">▾ {prod_name}</td>
-<td style="padding:8px 10px;border-bottom:1px solid #334155;text-align:right;font-weight:600;color:#e2e8f0;font-variant-numeric:tabular-nums">{_fmt_num(pv)}</td>
-<td style="padding:8px 10px;border-bottom:1px solid #334155;text-align:right;font-weight:600;color:#e2e8f0;font-variant-numeric:tabular-nums">{_fmt_num(tv)}</td>
-<td style="padding:8px 10px;border-bottom:1px solid #334155;text-align:right;font-size:11px">{_chg_badge(pv, tv)}</td>
-</tr>'''
-
-        # L2: 渠道（看板账号）
-        t_past = target_drill.get("product_account_streamers", {}).get(prod_name, {})
-        p_past = prev_drill.get("product_account_streamers", {}).get(prod_name, {})
+        t_past = target_drill.get("product_account_streamers", {}).get(pn, {})
+        p_past = prev_drill.get("product_account_streamers", {}).get(pn, {})
         acc_names = sorted(set(list(t_past.keys()) + list(p_past.keys())),
                            key=lambda a: -sum(v.get("总订单", 0) for v in t_past.get(a, {}).values()))
 
-        for acc_name in acc_names:
-            tv_st = sum(v.get("总订单", 0) for v in t_past.get(acc_name, {}).values())
-            pv_st = sum(v.get("总订单", 0) for v in p_past.get(acc_name, {}).values())
-            if tv_st == 0 and pv_st == 0:
+        for an in acc_names:
+            tvs = sum(v.get("总订单", 0) for v in t_past.get(an, {}).values())
+            pvs = sum(v.get("总订单", 0) for v in p_past.get(an, {}).values())
+            if tvs == 0 and pvs == 0:
                 continue
+            rows += f'<tr><td class=l2>▸ {an}</td><td class=l2v>{_fmt_num(pvs)}</td><td class=l2v>{_fmt_num(tvs)}</td><td class=l2b>{_chg_badge(pvs, tvs)}</td></tr>'
 
-            rows_html += f'''<tr>
-<td style="padding:6px 10px 6px 28px;border-bottom:1px solid #334155;font-weight:500;font-size:12px;color:#cbd5e1">▸ {acc_name}</td>
-<td style="padding:6px 10px;border-bottom:1px solid #334155;text-align:right;font-weight:600;font-size:12px;color:#cbd5e1;font-variant-numeric:tabular-nums">{_fmt_num(pv_st)}</td>
-<td style="padding:6px 10px;border-bottom:1px solid #334155;text-align:right;font-weight:600;font-size:12px;color:#cbd5e1;font-variant-numeric:tabular-nums">{_fmt_num(tv_st)}</td>
-<td style="padding:6px 10px;border-bottom:1px solid #334155;text-align:right;font-size:11px">{_chg_badge(pv_st, tv_st)}</td>
-</tr>'''
+            t_st = t_past.get(an, {})
+            p_st = p_past.get(an, {})
+            sn = sorted(set(list(t_st.keys()) + list(p_st.keys())),
+                        key=lambda s: -(t_st.get(s, {}).get("总订单", 0)))
 
-            # L3: 主播名
-            t_streamers = t_past.get(acc_name, {})
-            p_streamers = p_past.get(acc_name, {})
-            streamer_names = sorted(set(list(t_streamers.keys()) + list(p_streamers.keys())),
-                                    key=lambda s: -(t_streamers.get(s, {}).get("总订单", 0)))
-
-            for streamer_raw in streamer_names:
-                tv3 = t_streamers.get(streamer_raw, {}).get("总订单", 0)
-                pv3 = p_streamers.get(streamer_raw, {}).get("总订单", 0)
+            for sr in sn:
+                tv3 = t_st.get(sr, {}).get("总订单", 0)
+                pv3 = p_st.get(sr, {}).get("总订单", 0)
                 if tv3 == 0 and pv3 == 0:
                     continue
-                # 应用渠道→主播映射
-                display_name = ch_map.get(streamer_raw, streamer_raw)
+                dn = ch_map.get(sr, sr)
+                rows += f'<tr><td class=l3>{dn}</td><td class=l3v>{_fmt_num(pv3)}</td><td class=l3v>{_fmt_num(tv3)}</td><td class=l3b>{_chg_badge(pv3, tv3)}</td></tr>'
 
-                rows_html += f'''<tr>
-<td style="padding:5px 10px 5px 48px;border-bottom:1px solid #334155;font-weight:400;font-size:11px;color:#94a3b8">{display_name}</td>
-<td style="padding:5px 10px;border-bottom:1px solid #334155;text-align:right;font-size:11px;color:#94a3b8;font-variant-numeric:tabular-nums">{_fmt_num(pv3)}</td>
-<td style="padding:5px 10px;border-bottom:1px solid #334155;text-align:right;font-size:11px;color:#94a3b8;font-variant-numeric:tabular-nums">{_fmt_num(tv3)}</td>
-<td style="padding:5px 10px;border-bottom:1px solid #334155;text-align:right;font-size:11px">{_chg_badge(pv3, tv3)}</td>
-</tr>'''
+    rows += f'<tr class=tot><td>合计</td><td class=tv>{total_p:,}</td><td class=tv>{total_t:,}</td><td class=tb>{_chg_badge(total_p, total_t)}</td></tr>'
 
-    # 合计行
-    rows_html += f'''<tr style="background:linear-gradient(90deg,#273548,transparent)">
-<td style="padding:10px;font-weight:700;font-size:14px;color:#e2e8f0">合计</td>
-<td style="padding:10px;text-align:right;font-weight:700;font-size:14px;color:#e2e8f0;font-variant-numeric:tabular-nums">{total_p:,}</td>
-<td style="padding:10px;text-align:right;font-weight:700;font-size:14px;color:#e2e8f0;font-variant-numeric:tabular-nums">{total_t:,}</td>
-<td style="padding:10px;text-align:right;font-size:12px">{_chg_badge(total_p, total_t)}</td>
-</tr>'''
+    pl = f"{_fmt_date_short(prev_date)} {_day_of_week(prev_date)}" if prev_date else "—"
+    cl = f"{_fmt_date_short(target_date)} {_day_of_week(target_date)}"
 
-    prev_label = f"{_fmt_date_short(prev_date)} {_day_of_week(prev_date)}" if prev_date else "—"
-    curr_label = f"{_fmt_date_short(target_date)} {_day_of_week(target_date)}"
-
-    # 贡献榜简要
-    contrib_html = ""
+    ch = ""
     if contribution:
-        contrib_items = []
+        ci = []
         for c in contribution[:4]:
-            contrib_items.append(
-                f'<span style="display:inline-block;background:#273548;border-radius:6px;padding:4px 10px;margin:2px;font-size:11px;color:#cbd5e1">'
-                f'{c["name"]} <b style="color:#e2e8f0">{c["总订单"]}</b>'
-                f' <span style="color:#22c55e">付{c["付费单"]}</span>'
-                f'</span>')
-        contrib_html = '<div style="margin:8px 0">' + "".join(contrib_items) + "</div>"
+            ci.append(f'<span class=ci>{c["name"]} <b>{c["总订单"]}</b> <span class=cp>付{c["付费单"]}</span></span>')
+        ch = '<div class=cb>' + "".join(ci) + "</div>"
 
-    generated_at = datetime.now(BJT).strftime("%Y-%m-%d %H:%M")
+    ga = datetime.now(BJT).strftime("%Y-%m-%d %H:%M")
 
-    html = f'''<div style="background:#0f172a;border-radius:12px;padding:16px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:600px;margin:0 auto">
+    return f'''<style>
+.l1{{padding:8px 10px;border-bottom:1px solid #334155;font-weight:700;font-size:13px;color:#e2e8f0}}
+.l1v{{padding:8px 10px;border-bottom:1px solid #334155;text-align:right;font-weight:600;color:#e2e8f0;font-variant-numeric:tabular-nums}}
+.l1b{{padding:8px 10px;border-bottom:1px solid #334155;text-align:right;font-size:11px}}
+.l2{{padding:6px 10px 6px 28px;border-bottom:1px solid #334155;font-weight:500;font-size:12px;color:#cbd5e1}}
+.l2v{{padding:6px 10px;border-bottom:1px solid #334155;text-align:right;font-weight:600;font-size:12px;color:#cbd5e1;font-variant-numeric:tabular-nums}}
+.l2b{{padding:6px 10px;border-bottom:1px solid #334155;text-align:right;font-size:11px}}
+.l3{{padding:5px 10px 5px 48px;border-bottom:1px solid #334155;font-size:11px;color:#94a3b8}}
+.l3v{{padding:5px 10px;border-bottom:1px solid #334155;text-align:right;font-size:11px;color:#94a3b8;font-variant-numeric:tabular-nums}}
+.l3b{{padding:5px 10px;border-bottom:1px solid #334155;text-align:right;font-size:11px}}
+.th{{background:#273548;color:#94a3b8;font-weight:600;padding:9px 10px;border-bottom:2px solid #334155;font-size:11px}}
+.tot{{background:linear-gradient(90deg,#273548,transparent)}}
+.tot td{{padding:10px;font-weight:700;font-size:14px;color:#e2e8f0}}
+.tv{{text-align:right;font-variant-numeric:tabular-nums}}
+.tb{{text-align:right;font-size:12px}}
+.up{{color:#22c55e;font-weight:700}}
+.dn{{color:#ef4444;font-weight:700}}
+.zero{{color:#64748b}}
+.ci{{display:inline-block;background:#273548;border-radius:6px;padding:4px 10px;margin:2px;font-size:11px;color:#cbd5e1}}
+</style>
+<div style="background:#0f172a;border-radius:12px;padding:16px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:600px;margin:0 auto">
 <div style="text-align:center;margin-bottom:12px">
 <h2 style="color:#e2e8f0;font-size:16px;margin:0 0 4px">📊 量级速览</h2>
-<p style="color:#94a3b8;font-size:11px;margin:0">{curr_month} · 更新于 {generated_at}</p>
+<p style="color:#94a3b8;font-size:11px;margin:0">{curr_month} · 更新于 {ga}</p>
 </div>
 <table style="width:100%;border-collapse:collapse;background:#1e293b;border-radius:8px;overflow:hidden">
-<thead><tr>
-<th style="background:#273548;color:#94a3b8;font-weight:600;padding:9px 10px;border-bottom:2px solid #334155;text-align:left;font-size:11px">项目·渠道·主播</th>
-<th style="background:#273548;color:#94a3b8;font-weight:600;padding:9px 10px;border-bottom:2px solid #334155;text-align:right;font-size:11px">{prev_label}</th>
-<th style="background:#273548;color:#94a3b8;font-weight:600;padding:9px 10px;border-bottom:2px solid #334155;text-align:right;font-size:11px">{curr_label}</th>
-<th style="background:#273548;color:#94a3b8;font-weight:600;padding:9px 10px;border-bottom:2px solid #334155;text-align:right;font-size:11px">变化</th>
-</tr></thead>
-<tbody>{rows_html}</tbody>
+<thead><tr><th class=th>项目·渠道·主播</th><th class=th style=text-align:right>{pl}</th><th class=th style=text-align:right>{cl}</th><th class=th style=text-align:right>变化</th></tr></thead>
+<tbody>{rows}</tbody>
 </table>
-{contrib_html}
+{ch}
 <div style="margin-top:12px;text-align:center">
 <a href="https://jianzhi-dashboard.pages.dev" style="display:inline-block;background:#3b82f6;color:#fff;text-decoration:none;padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600">🔗 查看完整看板</a>
 </div>
 </div>'''
-
-    return html
 
 
 def generate_html(data_json):

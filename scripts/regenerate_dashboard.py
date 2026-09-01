@@ -296,14 +296,14 @@ def _fmt_num(n):
 def _chg_badge(prev, curr):
     if prev == 0:
         if curr > 0:
-            return '<span class="up">NEW</span>'
-        return '<span class="zero">0%</span>'
+            return '<span style="color:#22c55e;font-weight:700">NEW</span>'
+        return '<span style="color:#64748b">0%</span>'
     pct = (curr - prev) / prev * 100
     if pct > 0:
-        return f'<span class="up">+{pct:.0f}%</span>'
-    elif pct < 0:
-        return f'<span class="dn">{pct:.0f}%</span>'
-    return '<span class="zero">0%</span>'
+        return f'<span style="color:#22c55e;font-weight:700">+{pct:.0f}%</span>'
+    if pct < 0:
+        return f'<span style="color:#ef4444;font-weight:700">{pct:.0f}%</span>'
+    return '<span style="color:#64748b">0%</span>'
 
 
 def _day_of_week(date_str):
@@ -318,6 +318,21 @@ def _day_of_week(date_str):
 def _fmt_date_short(date_str):
     """07-21"""
     return date_str[5:] if len(date_str) >= 10 else date_str
+
+
+# 推送表格内联样式（微信/PushPlus 会剥离 <style> 标签，必须内联）
+_B = "border-bottom:1px solid #334155;"
+_S1N = f'padding:6px 8px;{_B}font-weight:700;font-size:13px;color:#e2e8f0'
+_S1V = f'padding:6px 8px;{_B}text-align:right;font-weight:600;color:#e2e8f0'
+_S1C = f'padding:6px 8px;{_B}text-align:right;font-size:11px'
+_S2N = f'padding:5px 8px 5px 24px;{_B}font-weight:500;font-size:12px;color:#cbd5e1'
+_S2V = f'padding:5px 8px;{_B}text-align:right;font-weight:600;font-size:12px;color:#cbd5e1'
+_S2C = f'padding:5px 8px;{_B}text-align:right;font-size:11px'
+_S3N = f'padding:4px 8px 4px 40px;{_B}font-size:11px;color:#94a3b8'
+_S3V = f'padding:4px 8px;{_B}text-align:right;font-size:11px;color:#94a3b8'
+_S3C = f'padding:4px 8px;{_B}text-align:right;font-size:11px'
+_STH = 'background:#273548;color:#94a3b8;font-weight:600;padding:8px;border-bottom:2px solid #334155;font-size:11px'
+_STH_R = _STH + ';text-align:right'
 
 
 def generate_push_overview(monthly_summary, months_all, ch_map, contribution):
@@ -337,7 +352,22 @@ def generate_push_overview(monthly_summary, months_all, ch_map, contribution):
     target_drill = daily_drill.get(target_date, {})
     prev_drill = daily_drill.get(prev_date, {}) if prev_date else {}
 
-    rows = ""
+    # 跨月修复：月初当天（当月只有1天）时，从上月数据取昨日对比
+    if prev_date is None:
+        try:
+            td = datetime.strptime(target_date, "%Y-%m-%d")
+            yd = (td - timedelta(days=1)).strftime("%Y-%m-%d")
+            ym = yd[:7]
+            pms = monthly_summary.get(ym, {})
+            if yd in pms.get("daily", {}):
+                prev_date = yd
+                prev_drill = pms.get("daily_drill", {}).get(yd, {})
+                print(f"  [推送] 跨月对比: {yd} (来自 {ym})")
+        except Exception:
+            pass
+
+    rows_all = ""   # 完整版（L1+L2+L3）
+    rows_main = ""  # 精简版（L1+L2，超长时回退）
     total_t = total_p = 0
 
     t_prods = target_drill.get("products", {})
@@ -352,7 +382,9 @@ def generate_push_overview(monthly_summary, months_all, ch_map, contribution):
             continue
         total_t += tv
         total_p += pv
-        rows += f'<tr><td class=l1>▾ {pn}</td><td class=l1v>{_fmt_num(pv)}</td><td class=l1v>{_fmt_num(tv)}</td><td class=l1b>{_chg_badge(pv, tv)}</td></tr>'
+        r = f'<tr><td style="{_S1N}">▾ {pn}</td><td style="{_S1V}">{_fmt_num(pv)}</td><td style="{_S1V}">{_fmt_num(tv)}</td><td style="{_S1C}">{_chg_badge(pv, tv)}</td></tr>'
+        rows_all += r
+        rows_main += r
 
         t_past = target_drill.get("product_account_streamers", {}).get(pn, {})
         p_past = prev_drill.get("product_account_streamers", {}).get(pn, {})
@@ -364,7 +396,9 @@ def generate_push_overview(monthly_summary, months_all, ch_map, contribution):
             pvs = sum(v.get("总订单", 0) for v in p_past.get(an, {}).values())
             if tvs == 0 and pvs == 0:
                 continue
-            rows += f'<tr><td class=l2>▸ {an}</td><td class=l2v>{_fmt_num(pvs)}</td><td class=l2v>{_fmt_num(tvs)}</td><td class=l2b>{_chg_badge(pvs, tvs)}</td></tr>'
+            r = f'<tr><td style="{_S2N}">▸ {an}</td><td style="{_S2V}">{_fmt_num(pvs)}</td><td style="{_S2V}">{_fmt_num(tvs)}</td><td style="{_S2C}">{_chg_badge(pvs, tvs)}</td></tr>'
+            rows_all += r
+            rows_main += r
 
             t_st = t_past.get(an, {})
             p_st = p_past.get(an, {})
@@ -377,9 +411,11 @@ def generate_push_overview(monthly_summary, months_all, ch_map, contribution):
                 if tv3 == 0 and pv3 == 0:
                     continue
                 dn = ch_map.get(sr, sr)
-                rows += f'<tr><td class=l3>{dn}</td><td class=l3v>{_fmt_num(pv3)}</td><td class=l3v>{_fmt_num(tv3)}</td><td class=l3b>{_chg_badge(pv3, tv3)}</td></tr>'
+                rows_all += f'<tr><td style="{_S3N}">{dn}</td><td style="{_S3V}">{_fmt_num(pv3)}</td><td style="{_S3V}">{_fmt_num(tv3)}</td><td style="{_S3C}">{_chg_badge(pv3, tv3)}</td></tr>'
 
-    rows += f'<tr class=tot><td>合计</td><td class=tv>{total_p:,}</td><td class=tv>{total_t:,}</td><td class=tb>{_chg_badge(total_p, total_t)}</td></tr>'
+    tot = f'<tr style="background:linear-gradient(90deg,#273548,transparent)"><td style="padding:9px;font-weight:700;font-size:14px;color:#e2e8f0">合计</td><td style="padding:9px;text-align:right;font-weight:700;font-size:14px;color:#e2e8f0">{total_p:,}</td><td style="padding:9px;text-align:right;font-weight:700;font-size:14px;color:#e2e8f0">{total_t:,}</td><td style="padding:9px;text-align:right;font-size:12px">{_chg_badge(total_p, total_t)}</td></tr>'
+    rows_all += tot
+    rows_main += tot
 
     pl = f"{_fmt_date_short(prev_date)} {_day_of_week(prev_date)}" if prev_date else "—"
     cl = f"{_fmt_date_short(target_date)} {_day_of_week(target_date)}"
@@ -388,45 +424,33 @@ def generate_push_overview(monthly_summary, months_all, ch_map, contribution):
     if contribution:
         ci = []
         for c in contribution[:4]:
-            ci.append(f'<span class=ci>{c["name"]} <b>{c["总订单"]}</b> <span class=cp>付{c["付费单"]}</span></span>')
-        ch = '<div class=cb>' + "".join(ci) + "</div>"
+            ci.append(f'<span style="display:inline-block;background:#273548;border-radius:6px;padding:4px 10px;margin:2px;font-size:11px;color:#cbd5e1">{c["name"]} <b style="color:#e2e8f0">{c["总订单"]}</b> <span style="color:#22c55e">付{c["付费单"]}</span></span>')
+        ch = '<div style="margin:8px 0">' + "".join(ci) + "</div>"
 
     ga = datetime.now(BJT).strftime("%Y-%m-%d %H:%M")
 
-    return f'''<style>
-.l1{{padding:8px 10px;border-bottom:1px solid #334155;font-weight:700;font-size:13px;color:#e2e8f0}}
-.l1v{{padding:8px 10px;border-bottom:1px solid #334155;text-align:right;font-weight:600;color:#e2e8f0;font-variant-numeric:tabular-nums}}
-.l1b{{padding:8px 10px;border-bottom:1px solid #334155;text-align:right;font-size:11px}}
-.l2{{padding:6px 10px 6px 28px;border-bottom:1px solid #334155;font-weight:500;font-size:12px;color:#cbd5e1}}
-.l2v{{padding:6px 10px;border-bottom:1px solid #334155;text-align:right;font-weight:600;font-size:12px;color:#cbd5e1;font-variant-numeric:tabular-nums}}
-.l2b{{padding:6px 10px;border-bottom:1px solid #334155;text-align:right;font-size:11px}}
-.l3{{padding:5px 10px 5px 48px;border-bottom:1px solid #334155;font-size:11px;color:#94a3b8}}
-.l3v{{padding:5px 10px;border-bottom:1px solid #334155;text-align:right;font-size:11px;color:#94a3b8;font-variant-numeric:tabular-nums}}
-.l3b{{padding:5px 10px;border-bottom:1px solid #334155;text-align:right;font-size:11px}}
-.th{{background:#273548;color:#94a3b8;font-weight:600;padding:9px 10px;border-bottom:2px solid #334155;font-size:11px}}
-.tot{{background:linear-gradient(90deg,#273548,transparent)}}
-.tot td{{padding:10px;font-weight:700;font-size:14px;color:#e2e8f0}}
-.tv{{text-align:right;font-variant-numeric:tabular-nums}}
-.tb{{text-align:right;font-size:12px}}
-.up{{color:#22c55e;font-weight:700}}
-.dn{{color:#ef4444;font-weight:700}}
-.zero{{color:#64748b}}
-.ci{{display:inline-block;background:#273548;border-radius:6px;padding:4px 10px;margin:2px;font-size:11px;color:#cbd5e1}}
-</style>
-<div style="background:#0f172a;border-radius:12px;padding:16px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:600px;margin:0 auto">
+    def _wrap(body_rows):
+        return f'''<div style="background:#0f172a;border-radius:12px;padding:16px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:600px;margin:0 auto">
 <div style="text-align:center;margin-bottom:12px">
 <h2 style="color:#e2e8f0;font-size:16px;margin:0 0 4px">📊 量级速览</h2>
 <p style="color:#94a3b8;font-size:11px;margin:0">{curr_month} · 更新于 {ga}</p>
 </div>
 <table style="width:100%;border-collapse:collapse;background:#1e293b;border-radius:8px;overflow:hidden">
-<thead><tr><th class=th>项目·渠道·主播</th><th class=th style=text-align:right>{pl}</th><th class=th style=text-align:right>{cl}</th><th class=th style=text-align:right>变化</th></tr></thead>
-<tbody>{rows}</tbody>
+<thead><tr><th style="{_STH}">项目·渠道·主播</th><th style="{_STH_R}">{pl}</th><th style="{_STH_R}">{cl}</th><th style="{_STH_R}">变化</th></tr></thead>
+<tbody>{body_rows}</tbody>
 </table>
 {ch}
 <div style="margin-top:12px;text-align:center">
 <a href="https://jianzhi-dashboard.pages.dev" style="display:inline-block;background:#3b82f6;color:#fff;text-decoration:none;padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600">🔗 查看完整看板</a>
 </div>
 </div>'''
+
+    full = _wrap(rows_all)
+    if len(full) <= 19500:
+        return full
+    # 超长回退：去掉 L3 主播明细行，避免超过 PushPlus 2万字限制
+    print(f"  [推送] 完整版 {len(full)} chars 超限，回退精简版（去掉主播明细）")
+    return _wrap(rows_main)
 
 
 def generate_html(data_json):

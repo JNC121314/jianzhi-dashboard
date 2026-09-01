@@ -446,9 +446,9 @@ def generate_push_overview(monthly_summary, months_all, ch_map, contribution):
 </div>'''
 
     full = _wrap(rows_all)
-    if len(full) <= 19500:
+    if len(full) <= 19900:
         return full
-    # 超长回退：去掉 L3 主播明细行，避免超过 PushPlus 2万字限制
+    # 超长回退：去掉 L3 主播明细行，避免超过 PushPlus 2万字限制（20,000）
     print(f"  [推送] 完整版 {len(full)} chars 超限，回退精简版（去掉主播明细）")
     return _wrap(rows_main)
 

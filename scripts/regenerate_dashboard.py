@@ -15,6 +15,22 @@ BJT = timezone(timedelta(hours=8))
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_DIR / "data/exports"
 ACCOUNTS = ["毛毛矩阵", "抖音", "视频号", "严总", "王颖瑜伽", "黄老师"]
+
+# ── 价格分档产品：瑜伽体验营按 1元/5元/9.9元/其他 区分（方便商务区分价格档） ──
+PRICE_TIER_PRODUCTS = {"【升级版】6天健康瑜伽体验营"}
+PRICE_TIERS = [(1.0, "1元瑜伽"), (5.0, "5元瑜伽"), (9.9, "9.9元瑜伽")]
+
+
+def price_tier(amount):
+    """付款金额 → 价格档名（仅对 PRICE_TIER_PRODUCTS 生效，其余返回 None）"""
+    try:
+        v = float(str(amount).replace("￥", "").replace(",", "").strip() or 0)
+    except Exception:
+        v = 0.0
+    for tv, name in PRICE_TIERS:
+        if abs(v - tv) < 0.001:
+            return name
+    return "其他"
 CHANNEL_MAP_CSV = PROJECT_DIR / "data/channel_anchor_map.csv"
 CHANNEL_MAP_XLSX = PROJECT_DIR / "data/渠道吧.xlsx"
 
@@ -138,6 +154,11 @@ def main():
         except: return False
 
     merged["付费"] = merged["付款金额"].apply(is_paid)
+    # 价格分档列（仅价格分档产品有值，供量级速览/产品汇总价格档层级使用）
+    merged["价格档"] = [
+        price_tier(a) if p in PRICE_TIER_PRODUCTS else None
+        for p, a in zip(merged["产品名称"], merged["付款金额"])
+    ]
     merged["日期"] = pd.to_datetime(merged["订单支付时间"], errors="coerce")
     merged["月份"] = merged["日期"].dt.to_period("M").astype(str)
     merged["日"] = merged["日期"].dt.date.astype(str)
@@ -197,16 +218,53 @@ def main():
                     pa[str(acc)] = st
                 prod_acc_st[str(prod)] = pa
             day_entry["product_account_streamers"] = prod_acc_st
+            # 产品→价格档→账号→主播（逐日，仅价格分档产品，供量级速览价格档层级）
+            prod_tier_acc_st = {}
+            for prod, pdf in ddf.groupby("产品名称"):
+                if prod not in PRICE_TIER_PRODUCTS:
+                    continue
+                pt = {}
+                for tier, tdf in pdf.groupby("价格档"):
+                    pa = {}
+                    for acc, aaf in tdf.groupby("账号"):
+                        st = {}
+                        for streamer, sf in aaf.groupby("渠道名称"):
+                            st[str(streamer)] = {"总订单":int(sf["订单id"].count()), "付费单":int(sf["付费"].sum()), "未付费":int(sf["订单id"].count()-sf["付费"].sum())}
+                        pa[str(acc)] = st
+                    pt[str(tier)] = pa
+                prod_tier_acc_st[str(prod)] = pt
+            day_entry["product_tier_account_streamers"] = prod_tier_acc_st
+            # 产品→价格档合计（逐日，供量级速览/推送价格档行）
+            prod_tier_totals = {}
+            for prod, pdf in ddf.groupby("产品名称"):
+                if prod not in PRICE_TIER_PRODUCTS:
+                    continue
+                tdf = pdf[pdf["价格档"].notna()]
+                if len(tdf):
+                    prod_tier_totals[str(prod)] = agg_group(tdf, "价格档")
+            day_entry["product_tier_totals"] = prod_tier_totals
             daily_drill[str(day)] = day_entry
         ms["daily_drill"] = daily_drill
 
         # 产品钻取
         product_drill = {}
         for prod, pdf in mdf.groupby("产品名称"):
-            product_drill[str(prod)] = {
+            entry = {
                 "accounts": agg_group(pdf, "账号"),
                 "channels": agg_group(pdf, "渠道名称"),
             }
+            # 价格分档产品：增加档位合计 + 档位→账号/渠道钻取（供产品汇总价格档层级）
+            if prod in PRICE_TIER_PRODUCTS:
+                tdf = pdf[pdf["价格档"].notna()]
+                entry["tiers"] = agg_group(tdf, "价格档") if len(tdf) else {}
+                tier_drill = {}
+                for tier, tgrp in tdf.groupby("价格档"):
+                    tier_drill[str(tier)] = {
+                        "accounts": agg_group(tgrp, "账号"),
+                        "channels": agg_group(tgrp, "渠道名称"),
+                    }
+                entry["tier_drill"] = tier_drill
+            product_drill[str(prod)] = entry
         ms["product_drill"] = product_drill
 
         # 渠道钻取
@@ -328,6 +386,10 @@ _S1C = f'padding:6px 8px;{_B}text-align:right;font-size:11px'
 _S2N = f'padding:5px 8px 5px 24px;{_B}font-weight:500;font-size:12px;color:#cbd5e1'
 _S2V = f'padding:5px 8px;{_B}text-align:right;font-weight:600;font-size:12px;color:#cbd5e1'
 _S2C = f'padding:5px 8px;{_B}text-align:right;font-size:11px'
+# 价格档行（L1 与 L2 之间，缩进 16px）
+_STN = f'padding:5px 8px 5px 16px;{_B}font-weight:600;font-size:12px;color:#a5b4fc'
+_STV = f'padding:5px 8px;{_B}text-align:right;font-weight:600;font-size:12px;color:#a5b4fc'
+_STC = f'padding:5px 8px;{_B}text-align:right;font-size:11px'
 _S3N = f'padding:4px 8px 4px 40px;{_B}font-size:11px;color:#94a3b8'
 _S3V = f'padding:4px 8px;{_B}text-align:right;font-size:11px;color:#94a3b8'
 _S3C = f'padding:4px 8px;{_B}text-align:right;font-size:11px'
@@ -385,6 +447,20 @@ def generate_push_overview(monthly_summary, months_all, ch_map, contribution):
         r = f'<tr><td style="{_S1N}">▾ {pn}</td><td style="{_S1V}">{_fmt_num(pv)}</td><td style="{_S1V}">{_fmt_num(tv)}</td><td style="{_S1C}">{_chg_badge(pv, tv)}</td></tr>'
         rows_all += r
         rows_main += r
+
+        # 价格档行（L1 与 L2 之间，仅价格分档产品有数据）
+        t_tier = target_drill.get("product_tier_totals", {}).get(pn, {})
+        p_tier = prev_drill.get("product_tier_totals", {}).get(pn, {})
+        tier_names = sorted(set(list(t_tier.keys()) + list(p_tier.keys())),
+                            key=lambda x: -(t_tier.get(x, {}).get("总订单", 0)))
+        for tn in tier_names:
+            ttv = t_tier.get(tn, {}).get("总订单", 0)
+            tpv = p_tier.get(tn, {}).get("总订单", 0)
+            if ttv == 0 and tpv == 0:
+                continue
+            r = f'<tr><td style="{_STN}">◦ {tn}</td><td style="{_STV}">{_fmt_num(tpv)}</td><td style="{_STV}">{_fmt_num(ttv)}</td><td style="{_STC}">{_chg_badge(tpv, ttv)}</td></tr>'
+            rows_all += r
+            rows_main += r
 
         t_past = target_drill.get("product_account_streamers", {}).get(pn, {})
         p_past = prev_drill.get("product_account_streamers", {}).get(pn, {})
@@ -541,6 +617,9 @@ tr:hover{background:var(--bg-hover)}
 .drill-row:hover td{color:var(--accent)}
 .drill-row td:first-child::before{content:'▸ ';font-size:10px;margin-right:4px;color:var(--text-muted)}
 .drill-row.expanded td:first-child::before{content:'▾ ';color:var(--accent)}
+.drill-sub{color:#a5b4fc;background:var(--bg)}
+.drill-sub td:first-child{padding-left:26px}
+.drill-sub td:first-child::before{content:'◦ ';font-size:10px;margin-right:3px;color:#a5b4fc}
 .drill-detail{display:none}
 .drill-detail.show{display:table-row}
 .drill-detail td{padding:0;background:var(--bg);border-bottom:1px solid var(--border)}
@@ -574,6 +653,10 @@ tr:hover{background:var(--bg-hover)}
 .ov-l2 td:first-child{padding-left:28px}
 .ov-l2 td:first-child::before{content:'▸ ';font-size:9px;color:var(--text-muted);margin-right:3px}
 .ov-l2.exp td:first-child::before{content:'▾ ';color:var(--accent)}
+.ov-lt{font-weight:600;color:#a5b4fc;background:var(--bg)}
+.ov-lt td:first-child{padding-left:20px}
+.ov-lt td:first-child::before{content:'◦ ';font-size:10px;color:#a5b4fc;margin-right:3px}
+.ov-lt .ov-num,.ov-lt .ov-chg{color:#a5b4fc}
 .ov-l3{font-weight:400;color:var(--text-muted);background:var(--bg)}
 .ov-l3 td:first-child{padding-left:48px;font-size:11px}
 .ov-total{background:linear-gradient(90deg,var(--bg-hover),transparent) !important;font-weight:700}
@@ -968,9 +1051,20 @@ function renderProductTable(md){
   document.getElementById('prodTbody').innerHTML=prods.map(function(e){
     let k=e[0],v=e[1],r=v.总订单>0?(v.付费单/v.总订单*100).toFixed(1)+'%':'0%';
     let id=hashId(k);
-    return'<tr class="drill-row" data-drill-type="product" data-drill-key="'+encodeURIComponent(k)+'">'+
+    let html='<tr class="drill-row" data-drill-type="product" data-drill-key="'+encodeURIComponent(k)+'">'+
       '<td>'+k+'</td><td>'+v.总订单.toLocaleString()+'</td><td>'+v.付费单.toLocaleString()+'</td><td>'+v.未付费.toLocaleString()+'</td><td>'+r+'</td>'+
-      '</tr><tr class="drill-detail" id="dd-'+id+'"><td colspan="5"><div class="drill-inner" id="ddi-'+id+'"></div></td></tr>';
+      '</tr>';
+    // 价格档子行（仅价格分档产品，月度合计）
+    let pd=md.product_drill&&md.product_drill[k];
+    if(pd&&pd.tiers){
+      Object.entries(pd.tiers).sort(function(a,b){return b[1].总订单-a[1].总订单}).forEach(function(t){
+        let tv=t[1],tr=tv.总订单>0?(tv.付费单/tv.总订单*100).toFixed(1)+'%':'0%';
+        html+='<tr class="drill-sub">'+
+          '<td>'+t[0]+'</td><td>'+tv.总订单.toLocaleString()+'</td><td>'+tv.付费单.toLocaleString()+'</td><td>'+tv.未付费.toLocaleString()+'</td><td>'+tr+'</td></tr>';
+      });
+    }
+    html+='<tr class="drill-detail" id="dd-'+id+'"><td colspan="5"><div class="drill-inner" id="ddi-'+id+'"></div></td></tr>';
+    return html;
   }).join('');
 }
 
@@ -1094,6 +1188,23 @@ function renderOverview(){
 
     // L2: 渠道（看板账号）
     if(isL1Exp){
+      // 价格档行（L1 与 L2 之间，仅价格分档产品有数据）
+      var tTT=targetDrill&&targetDrill.product_tier_totals&&targetDrill.product_tier_totals[prodName]?targetDrill.product_tier_totals[prodName]:{};
+      var pTT=prevDrill&&prevDrill.product_tier_totals&&prevDrill.product_tier_totals[prodName]?prevDrill.product_tier_totals[prodName]:{};
+      var tierNames=Object.keys(tTT).concat(Object.keys(pTT));
+      tierNames=[...new Set(tierNames)];
+      tierNames.sort(function(a,b){return(tTT[b]?tTT[b].总订单:0)-(tTT[a]?tTT[a].总订单:0)});
+      tierNames.forEach(function(tn){
+        var ttv=tTT[tn]?tTT[tn].总订单:0;
+        var tpv=pTT[tn]?pTT[tn].总订单:0;
+        if(ttv===0&&tpv===0)return;
+        html+='<tr class="ov-lt">'+
+          '<td>'+tn+'</td>'+
+          '<td class="ov-num">'+(tpv>0?tpv.toLocaleString():'—')+'</td>'+
+          '<td class="ov-num">'+(ttv>0?ttv.toLocaleString():'—')+'</td>'+
+          '<td class="ov-chg">'+chgBadge(calcChange(tpv,ttv))+'</td></tr>';
+      });
+
       // 该项目下各看板账号的数据
       var tAccs=targetDrill&&targetDrill.accounts?targetDrill.accounts:{};
       var pAccs=prevDrill&&prevDrill.accounts?prevDrill.accounts:{};
@@ -1210,6 +1321,9 @@ function buildTableDrill(type,key,md){
   }else if(type==='product'){
     drillData=md.product_drill&&md.product_drill[key];
     sections=[{title:'按账号',data:drillData?drillData.accounts:{}},{title:'按渠道',data:drillData?drillData.channels:{}}];
+    if(drillData&&drillData.tiers&&Object.keys(drillData.tiers).length>0){
+      sections.push({title:'按价格档',data:drillData.tiers});
+    }
   }else if(type==='channel'){
     drillData=md.channel_drill&&md.channel_drill[key];
     sections=[{title:'按产品',data:drillData?drillData.products:{}},{title:'按账号',data:drillData?drillData.accounts:{}}];
@@ -1242,10 +1356,15 @@ function sortTbl(id,col){
   });
   th.classList.add(asc?'sorted-desc':'sorted-asc');
   let tbody=document.getElementById(id).querySelector('tbody');
-  let detailMap={};
-  allRows.forEach(function(r){if(r.classList.contains('drill-detail')){let prev=r.previousElementSibling;if(prev&&prev.classList.contains('drill-row'))detailMap[rows.indexOf(prev)]=r}});
+  // 分组：drill-row + 其后所有非 drill-row 行（drill-sub 档位子行 / drill-detail 钻取行）跟随父行移动
+  let subMap={};
+  let curIdx=-1;
+  allRows.forEach(function(r){
+    if(r.classList.contains('drill-row')){curIdx=rows.indexOf(r);}
+    else if(curIdx>=0){(subMap[curIdx]=subMap[curIdx]||[]).push(r);}
+  });
   tbody.innerHTML='';
-  rows.forEach(function(r,i){tbody.appendChild(r);if(detailMap[i])tbody.appendChild(detailMap[i])});
+  rows.forEach(function(r,i){tbody.appendChild(r);if(subMap[i])subMap[i].forEach(function(x){tbody.appendChild(x)})});
 }
 
 function hashId(s){return s.replace(/[^a-zA-Z0-9\\u4e00-\\u9fa5]/g,'_').substring(0,50)}

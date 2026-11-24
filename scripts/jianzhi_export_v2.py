@@ -118,8 +118,8 @@ async def handle_captcha(page: Page, account_name: str) -> str:
 # 登录
 # ============================================================
 
-async def login(page: Page, account: dict) -> bool:
-    """登录简知分销平台（如果 profile 中已有有效 session 则跳过）"""
+async def login(page: Page, account: dict, force: bool = False) -> bool:
+    """登录简知分销平台（如果 profile 中已有有效 session 则跳过；force=True 强制重新登录）"""
     name = account["name"]
     phone = account["phone"]
     password = account["password"]
@@ -129,17 +129,22 @@ async def login(page: Page, account: dict) -> bool:
     print(f"{'='*60}")
 
     # 先尝试访问首页，检查是否已有有效登录态
-    try:
-        await page.goto(BASE_URL + "#/product/hot", wait_until="networkidle", timeout=15000)
-        await page.wait_for_timeout(2000)
-        current_url = page.url
-        if "login" not in current_url.lower():
-            print(f"  [登录] ✅ 已有有效登录态（profile 复用），跳过登录！")
-            return True
-        else:
-            print(f"  [登录] 登录态已过期，需要重新登录")
-    except Exception:
-        print(f"  [登录] 检查登录态失败，执行正常登录")
+    if not force:
+        try:
+            await page.goto(BASE_URL + "#/product/hot", wait_until="networkidle", timeout=15000)
+            await page.wait_for_timeout(2000)
+            current_url = page.url
+            if "login" not in current_url.lower():
+                # SPA 异步跳转可能延迟，等待后再复查一次，避免误判登录态有效
+                await page.wait_for_timeout(3000)
+                current_url = page.url
+            if "login" not in current_url.lower():
+                print(f"  [登录] ✅ 已有有效登录态（profile 复用），跳过登录！")
+                return True
+            else:
+                print(f"  [登录] 登录态已过期，需要重新登录")
+        except Exception:
+            print(f"  [登录] 检查登录态失败，执行正常登录")
 
     for attempt in range(MAX_LOGIN_RETRIES):
         try:
@@ -236,7 +241,9 @@ async def navigate_to_orders(page: Page) -> bool:
                 await page.wait_for_timeout(2000)
                 current = page.url
                 page_text = await page.locator("body").text_content() or ""
-                if "order" in current.lower() or "订单" in page_text:
+                # 注意：登录跳转 URL（如 #/user/login?redirect=channelOrder）也含 "order"，
+                # 必须排除 login 页，否则会把登录页误判为订单页（2026-11-24 抖音账号踩坑）
+                if ("order" in current.lower() or "订单" in page_text) and "login" not in current.lower():
                     print(f"  [导航] 通过URL成功到达: {current}")
                     return True
             except:
@@ -420,6 +427,19 @@ async def process_account(p: object, account: dict) -> list:
             return []
 
         nav_success = await navigate_to_orders(page)
+
+        # 登录态实际失效：被重定向到登录页 → 强制重新登录后重试
+        if "login" in page.url.lower():
+            print(f"  ⚠️ 账号 {name} 登录态实际已失效（被跳转到登录页），强制重新登录...")
+            if await login(page, account, force=True):
+                await navigate_to_orders(page)
+                if "login" in page.url.lower():
+                    print(f"  ❌ 账号 {name} 重新登录后仍在登录页，放弃")
+                    return []
+            else:
+                print(f"  ❌ 账号 {name} 重新登录失败")
+                return []
+
         if not nav_success:
             print(f"  ⚠️ 账号 {name} 导航到订单页失败")
 
